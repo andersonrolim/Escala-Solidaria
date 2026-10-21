@@ -58,6 +58,8 @@ O caso de uso de demonstração é a **Associação Girassol Azul**, uma creche 
 
 O banco usa o SQLite que já vem dentro do Node (`node:sqlite`). Por isso não é preciso instalar banco de dados nem compilar nenhum driver.
 
+**Publicar na internet (grátis):** veja o passo a passo em [`docs/DEPLOY-RENDER.md`](docs/DEPLOY-RENDER.md). O app roda no **Render**, e o banco fica no **Turso**, que é SQLite na nuvem. Assim os dados não se perdem quando o Render reinicia.
+
 ```bash
 # 1. Instalar as dependências
 npm install
@@ -94,6 +96,7 @@ Outras ONGs: `mesa@demo.com`, `vestir@demo.com`, `aprender@demo.com`, `peludos@d
 | `npm run dev`  | Inicia o servidor e reinicia quando um arquivo muda      |
 | `npm run seed` | **Apaga** o banco e recria com os dados de demonstração  |
 | `npm test`     | Roda os testes automatizados                             |
+| `TEST_DB=file:./t.db npm test` | Roda os mesmos testes pelo cliente do Turso (libSQL) |
 
 ---
 
@@ -104,7 +107,7 @@ escala-solidaria/
 ├── src/
 │   ├── server.js            # Inicia o servidor e o verificador de lembretes
 │   ├── app.js               # Configura o Express (sessão, rotas, erros)
-│   ├── db.js                # Conexão SQLite (node:sqlite) e criação das tabelas
+│   ├── db.js                # Banco: SQLite local (node:sqlite) ou Turso (libSQL), mesma interface
 │   ├── seed.js              # Dados de demonstração
 │   ├── utils.js             # Datas, validação, geração de código
 │   ├── rotas/
@@ -141,7 +144,9 @@ escala-solidaria/
 │   ├── api.test.js          # Testes de voluntariado (Jest + Supertest)
 │   └── doacoes.test.js      # Testes de doações, PIX e recibos
 ├── materiais/               # Kit de extensão (PDFs, posts e versões editáveis)
+├── render.yaml              # Configuração de deploy no Render (Blueprint)
 ├── docs/
+│   ├── DEPLOY-RENDER.md     # Passo a passo: Render + Turso, grátis
 │   ├── modelo-banco.mmd     # Diagrama ER (Mermaid)
 │   └── modelo-banco.png     # Diagrama ER (imagem)
 └── data/escala.db           # Banco SQLite (criado automaticamente)
@@ -219,7 +224,7 @@ Todas as rotas usam JSON e sessão por cookie. Os erros voltam como `{ "erro": "
 npm test
 ```
 
-São 34 testes automatizados, todos rodando num banco em memória. Eles cobrem:
+São 34 testes automatizados. Por padrão eles rodam num SQLite em memória, e com `TEST_DB=file:…` rodam pelo mesmo cliente usado com o Turso. Eles cobrem:
 
 - cadastro, login, validações e rotas protegidas
 - permissões: voluntário não cria turno, e uma ONG não acessa a outra
@@ -236,10 +241,10 @@ São 34 testes automatizados, todos rodando num banco em memória. Eles cobrem:
 
 - **Lembretes simulados.** A mensagem é gravada na tabela `notificacoes` e impressa no console do servidor. Para enviar de verdade, basta trocar a função `enviar` em `src/servicos/lembretes.js` por uma integração: API oficial do WhatsApp Business, Twilio, ou Nodemailer com SMTP para e-mail.
 - **Leitura do QR pela câmera.** Por enquanto a ONG digita o código que aparece abaixo do QR. Como evolução, dá para usar uma biblioteca como `html5-qrcode` e ler direto pela câmera do celular.
-- **Sessões em memória.** Reiniciar o servidor desloga todo mundo. Em produção, use um store persistente (ex.: `connect-sqlite3`) e defina a variável `SESSION_SECRET`.
+- **Sessões em memória.** Reiniciar o servidor desloga todo mundo; os dados continuam salvos. Em produção, defina `SESSION_SECRET` (o `render.yaml` já gera uma).
 - **SQLite nativo do Node.** O módulo `node:sqlite` ainda é marcado como "experimental" pelo Node. Funciona bem para este projeto, mas nos testes pode aparecer um aviso amarelo no terminal, que pode ser ignorado.
 - **PIX sem confirmação automática.** Com PIX estático, o banco não avisa o sistema quando o dinheiro cai, então a ONG confere o extrato. Para confirmar automaticamente, seria preciso usar a API PIX de um banco ou intermediador (PIX dinâmico com webhook).
 - **Recibo não é documento fiscal.** O texto do PDF deixa isso claro. A dedução no IR depende da entidade e do doador.
 - **Fonte.** O layout usa a fonte Plus Jakarta Sans do Google Fonts. Sem internet, o navegador usa a fonte do sistema e tudo continua funcionando.
-- **Fuso horário.** As datas usam a hora local do servidor, o que basta para uma ONG local.
+- **Fuso horário.** As datas usam o horário de Brasília. No servidor, defina `TZ=America/Sao_Paulo` (já está no `render.yaml`). No Turso, o "agora" do banco é calculado como UTC − 3h, já que o Brasil não tem horário de verão desde 2019.
 - **Próximos passos sugeridos:** recuperação de senha, perfil do voluntário, mapa com distância até o turno, avaliação do turno pelo voluntário e relatórios mensais para a ONG.

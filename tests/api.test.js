@@ -1,5 +1,9 @@
 const request = require('supertest');
-const { abrirBanco } = require('../src/db');
+const { abrirBanco, apagarTudo } = require('../src/db');
+
+// Por padrão os testes usam SQLite em memória. Para testar o cliente do Turso (libSQL):
+//   TEST_DB=file:/caminho/teste.db npm test
+const TEST_DB = process.env.TEST_DB || ':memory:';
 const { criarApp } = require('../src/app');
 const { somarDias } = require('../src/utils');
 const { processarLembretes } = require('../src/servicos/lembretes');
@@ -26,11 +30,12 @@ const turnoBase = () => ({
   vagas: 2
 });
 
-beforeEach(() => {
-  db = abrirBanco(':memory:');
+beforeEach(async () => {
+  db = await abrirBanco(TEST_DB);
+  if (TEST_DB !== ':memory:') await apagarTudo(db);
   app = criarApp(db, { segredoSessao: 'teste' });
 });
-afterEach(() => db.close());
+afterEach(async () => db.fechar());
 
 describe('Autenticação', () => {
   test('cadastra voluntário e retorna a sessão', async () => {
@@ -135,7 +140,7 @@ describe('Inscrição do voluntário', () => {
 
     const meus = await v3.get('/api/me/inscricoes');
     expect(meus.body.proximos[0].status).toBe('confirmada');
-    const notifs = db.prepare(`SELECT canal FROM notificacoes WHERE tipo = 'promovido_espera'`).all();
+    const notifs = await db.all(`SELECT canal FROM notificacoes WHERE tipo = 'promovido_espera'`);
     expect(notifs.map((n) => n.canal).sort()).toEqual(['email', 'whatsapp']);
   });
 
@@ -237,12 +242,12 @@ describe('Lembretes de 24h', () => {
     const enviados = [];
     const espiao = (canal, destino) => enviados.push([canal, destino]);
 
-    expect(processarLembretes(db, quase, espiao)).toBe(2);
+    expect(await processarLembretes(db, quase, espiao)).toBe(2);
     expect(enviados).toEqual([['whatsapp', '11999990000'], ['email', 'vol@teste.com']]);
-    expect(processarLembretes(db, quase, espiao)).toBe(0); // não reenvia
+    expect(await processarLembretes(db, quase, espiao)).toBe(0); // não reenvia
 
     // Muito antes do turno: nada a enviar
-    db.prepare('DELETE FROM notificacoes').run();
-    expect(processarLembretes(db, new Date(), espiao)).toBe(0);
+    await db.run('DELETE FROM notificacoes');
+    expect(await processarLembretes(db, new Date(), espiao)).toBe(0);
   });
 });

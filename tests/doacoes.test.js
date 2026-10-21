@@ -1,5 +1,9 @@
 const request = require('supertest');
-const { abrirBanco } = require('../src/db');
+const { abrirBanco, apagarTudo } = require('../src/db');
+
+// Por padrão os testes usam SQLite em memória. Para testar o cliente do Turso (libSQL):
+//   TEST_DB=file:/caminho/teste.db npm test
+const TEST_DB = process.env.TEST_DB || ':memory:';
 const { criarApp } = require('../src/app');
 const { gerarPayloadPix, crc16, normalizarChave } = require('../src/servicos/pix');
 const { reaisPorExtenso } = require('../src/servicos/extenso');
@@ -34,11 +38,12 @@ async function ongComPix() {
   return { ong, ongId };
 }
 
-beforeEach(() => {
-  db = abrirBanco(':memory:');
+beforeEach(async () => {
+  db = await abrirBanco(TEST_DB);
+  if (TEST_DB !== ':memory:') await apagarTudo(db);
   app = criarApp(db, { segredoSessao: 'teste' });
 });
-afterEach(() => db.close());
+afterEach(async () => db.fechar());
 
 describe('PIX (BR Code)', () => {
   test('CRC16 bate com o exemplo oficial do Banco Central', () => {

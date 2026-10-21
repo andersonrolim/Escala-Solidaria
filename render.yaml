@@ -1,0 +1,25 @@
+# Blueprint do Render — cria o serviço web com as configurações abaixo.
+# No Render: New → Blueprint → escolha o repositório. Depois preencha as variáveis do Turso.
+services:
+  - type: web
+    name: escala-solidaria
+    runtime: node
+    plan: free
+    region: virginia            # perto da região us-east do Turso (menos atraso nas consultas)
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true            # cada push no GitHub publica a nova versão
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TZ                 # horário de Brasília para datas, turnos e lembretes
+        value: America/Sao_Paulo
+      - key: SESSION_SECRET     # gerado automaticamente pelo Render
+        generateValue: true
+      - key: SEED_DEMO          # true = cria os dados de demonstração se o banco estiver vazio
+        value: "true"
+      - key: TURSO_DATABASE_URL # ex.: libsql://escala-solidaria-seuusuario.turso.io
+        sync: false
+      - key: TURSO_AUTH_TOKEN   # token gerado no painel do Turso
+        sync: false

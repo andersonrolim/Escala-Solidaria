@@ -28,9 +28,9 @@ function formatarTurno(t) {
 function rotasTurnos(db) {
   const r = express.Router();
 
-  r.get('/categorias', (req, res) => res.json({ categorias: CATEGORIAS }));
+  r.get('/categorias', async (req, res) => res.json({ categorias: CATEGORIAS }));
 
-  r.get('/', (req, res) => {
+  r.get('/', async (req, res) => {
     const uid = req.session.usuario?.id ?? 0;
     const params = [uid, agoraLocal().dt];
     let sql = `${SELECT_TURNO} WHERE t.status = 'publicado' AND (t.data || ' ' || t.hora_inicio) > ?`;
@@ -39,23 +39,23 @@ function rotasTurnos(db) {
       params.push(String(req.query.categoria));
     }
     if (req.query.q) {
-      sql += ' AND (t.titulo LIKE ? OR o.nome LIKE ? OR t.endereco LIKE ?)';
-      const q = `%${String(req.query.q).trim()}%`;
+      sql += ' AND (LOWER(t.titulo) LIKE ? OR LOWER(o.nome) LIKE ? OR LOWER(t.endereco) LIKE ?)';
+      const q = `%${String(req.query.q).trim().toLowerCase()}%`;
       params.push(q, q, q);
     }
     sql += ' ORDER BY t.data, t.hora_inicio LIMIT 200';
-    res.json({ turnos: db.prepare(sql).all(...params).map(formatarTurno) });
+    res.json({ turnos: (await db.all(sql, ...params)).map(formatarTurno) });
   });
 
-  r.get('/:id', (req, res) => {
+  r.get('/:id', async (req, res) => {
     const uid = req.session.usuario?.id ?? 0;
-    const t = db.prepare(`${SELECT_TURNO} WHERE t.id = ? AND t.status != 'rascunho'`).get(uid, Number(req.params.id));
+    const t = (await db.get(`${SELECT_TURNO} WHERE t.id = ? AND t.status != 'rascunho'`, uid, Number(req.params.id)));
     if (!t) throw new ErroHttp(404, 'Turno não encontrado.');
     res.json({ turno: formatarTurno(t) });
   });
 
-  r.post('/:id/inscricao', exigir('voluntario'), (req, res) => {
-    const i = inscrever(db, Number(req.params.id), req.session.usuario.id);
+  r.post('/:id/inscricao', exigir('voluntario'), async (req, res) => {
+    const i = await inscrever(db, Number(req.params.id), req.session.usuario.id);
     res.status(201).json({
       inscricao: i,
       mensagem: i.status === 'confirmada'
@@ -64,8 +64,8 @@ function rotasTurnos(db) {
     });
   });
 
-  r.delete('/:id/inscricao', exigir('voluntario'), (req, res) => {
-    res.json(cancelar(db, Number(req.params.id), req.session.usuario.id));
+  r.delete('/:id/inscricao', exigir('voluntario'), async (req, res) => {
+    res.json(await cancelar(db, Number(req.params.id), req.session.usuario.id));
   });
 
   return r;
@@ -76,14 +76,14 @@ function rotasMe(db) {
   const r = express.Router();
   r.use(exigir('voluntario'));
 
-  r.get('/inscricoes', (req, res) => {
+  r.get('/inscricoes', async (req, res) => {
     const agora = agoraLocal().dt;
-    const linhas = db.prepare(`
+    const linhas = (await db.all(`
       SELECT i.id, i.status, i.presenca, i.codigo, i.checkin_em,
              t.id AS turno_id, t.titulo, t.categoria, t.data, t.hora_inicio, t.hora_fim, t.status AS turno_status,
              o.nome AS ong_nome
         FROM inscricoes i JOIN turnos t ON t.id = i.turno_id JOIN ongs o ON o.id = t.ong_id
-       WHERE i.voluntario_id = ? AND i.status != 'cancelada'`).all(req.session.usuario.id);
+       WHERE i.voluntario_id = ? AND i.status != 'cancelada'`, req.session.usuario.id));
     const proximos = [];
     const historico = [];
     for (const l of linhas) {
@@ -96,27 +96,26 @@ function rotasMe(db) {
     res.json({ proximos, historico });
   });
 
-  r.get('/resumo', (req, res) => {
+  r.get('/resumo', async (req, res) => {
     const ano = /^\d{4}$/.test(req.query.ano || '') ? req.query.ano : String(new Date().getFullYear());
-    const s = db.prepare(`
+    const s = (await db.get(`
       SELECT COALESCE(SUM(${SQL_DURACAO}), 0) AS horas, COUNT(*) AS turnos, COUNT(DISTINCT t.ong_id) AS ongs
         FROM inscricoes i JOIN turnos t ON t.id = i.turno_id
-       WHERE i.voluntario_id = ? AND i.status = 'confirmada' AND i.presenca = 'presente' AND substr(t.data, 1, 4) = ?`)
-      .get(req.session.usuario.id, ano);
-    const detalhes = db.prepare(`
+       WHERE i.voluntario_id = ? AND i.status = 'confirmada' AND i.presenca = 'presente' AND substr(t.data, 1, 4) = ?`, req.session.usuario.id, ano));
+    const detalhes = (await db.all(`
       SELECT t.titulo, t.data, t.hora_inicio, t.hora_fim, o.nome AS ong_nome, ${SQL_DURACAO} AS horas
         FROM inscricoes i JOIN turnos t ON t.id = i.turno_id JOIN ongs o ON o.id = t.ong_id
        WHERE i.voluntario_id = ? AND i.status = 'confirmada' AND i.presenca = 'presente' AND substr(t.data, 1, 4) = ?
-       ORDER BY t.data`).all(req.session.usuario.id, ano);
+       ORDER BY t.data`, req.session.usuario.id, ano));
     res.json({ ano: Number(ano), nome: req.session.usuario.nome, horas: s.horas, turnos: s.turnos, ongs: s.ongs, detalhes });
   });
 
   r.get('/inscricoes/:id/checkin', async (req, res) => {
-    const i = db.prepare(`
+    const i = (await db.get(`
       SELECT i.id, i.status, i.presenca, i.codigo, i.checkin_em,
              t.titulo, t.data, t.hora_inicio, t.hora_fim, o.nome AS ong_nome
         FROM inscricoes i JOIN turnos t ON t.id = i.turno_id JOIN ongs o ON o.id = t.ong_id
-       WHERE i.id = ? AND i.voluntario_id = ? AND i.status != 'cancelada'`).get(Number(req.params.id), req.session.usuario.id);
+       WHERE i.id = ? AND i.voluntario_id = ? AND i.status != 'cancelada'`, Number(req.params.id), req.session.usuario.id));
     if (!i) throw new ErroHttp(404, 'Inscrição não encontrada.');
     const qr = await QRCode.toDataURL(i.codigo, { width: 440, margin: 1, color: { dark: '#1B2430', light: '#FFFFFF' } });
     res.json({ inscricao: i, qr });

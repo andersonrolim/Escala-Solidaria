@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const MemoryStore = require('memorystore')(session);
 const path = require('path');
 const { rotasAuth } = require('./rotas/auth');
 const { rotasTurnos, rotasMe } = require('./rotas/voluntario');
@@ -12,13 +13,20 @@ const { rotasDoacoes, rotasDoacoesOng } = require('./rotas/doacoes');
  */
 function criarApp(db, { segredoSessao = process.env.SESSION_SECRET || 'troque-este-segredo-em-producao' } = {}) {
   const app = express();
+  const producao = process.env.NODE_ENV === 'production';
+  if (producao) app.set('trust proxy', 1); // o Render fica na frente do app (HTTPS)
+
+  // Verificação de saúde: usada pelo Render e pelo "despertador" (UptimeRobot).
+  // NÃO consulta o banco, para não gastar a cota do Turso a cada 10 minutos.
+  app.get('/api/health', (req, res) => res.json({ ok: true }));
 
   app.use(express.json({ limit: '100kb' }));
   app.use(session({
     secret: segredoSessao,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 8 }
+    store: new MemoryStore({ checkPeriod: 1000 * 60 * 60 }), // limpa sessões vencidas a cada hora
+    cookie: { httpOnly: true, sameSite: 'lax', secure: producao, maxAge: 1000 * 60 * 60 * 8 }
   }));
 
   app.use('/api/auth', rotasAuth(db));
