@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Check-in — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app app-branco">
+  <header class="topo-simples">
+    <a href="/meus-turnos.html" aria-label="Voltar para meus turnos"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></a>
+    <span style="font-size:16px;font-weight:700">Check-in do turno</span>
+  </header>
+  <main class="conteudo" id="conteudo" style="align-items:center;text-align:center;gap:20px"><div class="carregando">Carregando…</div></main>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  const id = new URLSearchParams(location.search).get('inscricao');
+
+  (async () => {
+    await exigirLogin('voluntario');
+    carregar();
+    // Atualiza sozinho a cada 10s para mostrar quando a ONG registrar a presença
+    setInterval(carregar, 10000);
+  })();
+
+  async function carregar() {
+    try {
+      const { inscricao: i, qr } = await api('GET', `/api/me/inscricoes/${encodeURIComponent(id)}/checkin`);
+      const status = i.presenca === 'presente'
+        ? `<span class="tag tag-verde" role="status" style="font-size:14px;padding:8px 14px">Presença registrada às ${esc((i.checkin_em || '').slice(11, 16))}</span>`
+        : i.status === 'espera'
+          ? '<span class="tag tag-laranja" role="status" style="font-size:14px;padding:8px 14px">Você ainda está na lista de espera</span>'
+          : '<span class="tag tag-laranja" role="status" style="font-size:14px;padding:8px 14px">Aguardando leitura pela ONG</span>';
+      document.getElementById('conteudo').innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <b style="font-size:20px">${esc(i.titulo)}</b>
+          <span class="ajuda" style="font-size:14px">${esc(i.ong_nome)} · ${fmtData(i.data)} · ${fmtHora(i.hora_inicio)}</span>
+        </div>
+        <div class="qr-box"><img src="${qr}" alt="QR Code de check-in com o código ${esc(i.codigo)}"></div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span class="ajuda" style="font-weight:600">Código manual</span>
+          <b style="font-size:22px;letter-spacing:3px">${esc(i.codigo)}</b>
+        </div>
+        ${status}
+        <p style="font-size:14px;line-height:1.55;color:var(--muted)">Mostre este código ao coordenador da ONG quando chegar. Suas horas entram no certificado automaticamente.</p>`;
+    } catch (err) {
+      document.getElementById('conteudo').innerHTML = `<div class="alerta alerta-erro">${esc(err.message)}</div>`;
+    }
+  }
+</script>
+</body>
+</html>

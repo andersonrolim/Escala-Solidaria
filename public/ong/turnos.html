@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Todos os turnos — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="painel">
+  <div id="menu"></div>
+  <main class="principal">
+    <div class="cabecalho">
+      <h1>Todos os turnos</h1>
+      <a class="btn btn-primario" href="/ong/novo-turno.html">+ Novo turno</a>
+    </div>
+    <section class="card">
+      <div class="tabela-wrap">
+        <table class="tabela" style="min-width:760px">
+          <thead><tr><th scope="col">Turno</th><th scope="col">Data</th><th scope="col">Inscritos</th><th scope="col">Status</th><th scope="col" style="text-align:right">Ações</th></tr></thead>
+          <tbody id="lista"><tr><td colspan="5" class="carregando">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  (async () => {
+    const usuario = await exigirLogin('ong');
+    document.getElementById('menu').outerHTML = menuOng('turnos', usuario);
+    carregar();
+  })();
+
+  async function carregar() {
+    const { turnos } = await api('GET', '/api/ong/turnos');
+    const agora = `${dataISO(0)} ${new Date().toTimeString().slice(0, 5)}`;
+    document.getElementById('lista').innerHTML = turnos.length ? turnos.map((t) => {
+      const passou = `${t.data} ${t.hora_fim}` <= agora;
+      const tag = t.status === 'cancelado' ? '<span class="tag tag-vermelho">Cancelado</span>'
+        : t.status === 'rascunho' ? '<span class="tag tag-cinza">Rascunho</span>'
+        : passou ? '<span class="tag tag-cinza">Encerrado</span>'
+        : '<span class="tag tag-verde">Publicado</span>';
+      const podeEditar = t.status !== 'cancelado' && !passou;
+      return `<tr>
+        <td><b>${esc(t.titulo)}</b><br><span class="ajuda">${esc(t.categoria)}</span></td>
+        <td style="white-space:nowrap">${fmtData(t.data)} · ${fmtHorario(t.hora_inicio, t.hora_fim)}</td>
+        <td>${t.ocupadas}/${t.vagas}${t.em_espera ? ` <span class="ajuda">(+${t.em_espera} espera)</span>` : ''}</td>
+        <td>${tag}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <a href="/ong/presenca.html?id=${t.id}" style="font-weight:700;text-decoration:none;margin-left:12px">Presença</a>
+          ${podeEditar ? `<a href="/ong/novo-turno.html?id=${t.id}" style="font-weight:700;text-decoration:none;margin-left:12px">Editar</a>
+          <button class="btn btn-perigo btn-pequeno" data-cancelar="${t.id}">Cancelar</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" class="vazio">Nenhum turno criado ainda.</td></tr>';
+
+    document.querySelectorAll('[data-cancelar]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Cancelar este turno? Os voluntários inscritos verão o turno como cancelado.')) return;
+      try {
+        await api('POST', `/api/ong/turnos/${b.dataset.cancelar}/cancelar`);
+        toast('Turno cancelado.');
+        carregar();
+      } catch (err) { toast(err.message, true); }
+    }));
+  }
+</script>
+</body>
+</html>

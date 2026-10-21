@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lista de presença — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="painel">
+  <div id="menu"></div>
+  <main class="principal">
+    <div class="cabecalho">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <a href="/ong/painel.html" style="font-size:14px;font-weight:700;text-decoration:none">← Voltar ao painel</a>
+        <h1 id="titulo">Lista de presença</h1>
+        <span class="sub" id="sub"></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">
+        <a class="btn btn-secundario" id="btn-csv" href="#">Exportar CSV</a>
+        <button class="btn btn-primario" id="btn-checkin" type="button">Registrar check-in</button>
+      </div>
+    </div>
+
+    <section class="kpis" id="resumo" aria-label="Resumo da presença" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></section>
+
+    <section class="card">
+      <div class="card-cab">
+        <h2>Voluntários inscritos</h2>
+        <label class="busca" for="filtro" style="height:40px;border:1px solid var(--borda-input);background:#fff">
+          <span class="sr-only">Buscar voluntário</span>
+          <input id="filtro" type="search" placeholder="Buscar voluntário" style="width:180px">
+        </label>
+      </div>
+      <div class="tabela-wrap">
+        <table class="tabela" style="min-width:760px">
+          <thead><tr><th scope="col">Voluntário</th><th scope="col">WhatsApp</th><th scope="col">Turnos feitos</th><th scope="col">Status</th><th scope="col">Check-in</th><th scope="col" style="text-align:right">Ação</th></tr></thead>
+          <tbody id="lista"><tr><td colspan="6" class="carregando">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg-checkin" aria-labelledby="dlg-titulo">
+  <form method="dialog" id="form-checkin" style="display:flex;flex-direction:column;gap:16px">
+    <h2 id="dlg-titulo" style="font-size:20px">Registrar check-in</h2>
+    <p class="ajuda" style="font-size:14px">Digite o código que aparece abaixo do QR Code no celular do voluntário (ex.: ES-AB12CD).</p>
+    <div class="campo"><label for="codigo">Código</label><input id="codigo" autocomplete="off" style="text-transform:uppercase;letter-spacing:2px;font-weight:700"></div>
+    <div id="dlg-msg" class="alerta" role="status" hidden></div>
+    <div style="display:flex;justify-content:flex-end;gap:12px">
+      <button class="btn btn-secundario" value="fechar" formnovalidate>Fechar</button>
+      <button class="btn btn-primario" id="btn-confirmar" type="button">Confirmar presença</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/js/api.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const turnoId = new URLSearchParams(location.search).get('id');
+  let dados;
+
+  (async () => {
+    const usuario = await exigirLogin('ong');
+    $('menu').outerHTML = menuOng('', usuario);
+    $('btn-csv').href = `/api/ong/turnos/${encodeURIComponent(turnoId)}/presenca-csv`;
+    carregar();
+  })();
+
+  async function carregar() {
+    try {
+      dados = await api('GET', `/api/ong/turnos/${encodeURIComponent(turnoId)}/presenca`);
+    } catch (err) {
+      $('lista').innerHTML = `<tr><td colspan="6"><div class="alerta alerta-erro">${esc(err.message)}</div></td></tr>`;
+      return;
+    }
+    const t = dados.turno;
+    $('titulo').textContent = t.titulo;
+    $('sub').textContent = `${fmtData(t.data)} · ${fmtHorario(t.hora_inicio, t.hora_fim)} · ${t.online ? 'Online' : t.endereco}`;
+    const r = dados.resumo;
+    $('resumo').innerHTML = [
+      ['Confirmados', r.inscritos, 'var(--texto)'], ['Presentes', r.presentes, 'var(--verde-texto)'],
+      ['Aguardando', r.aguardando, 'var(--laranja-texto)'], ['Ausentes', r.ausentes, 'var(--vermelho-texto)'],
+      ['Lista de espera', r.em_espera, 'var(--azul-texto)']
+    ].map(([rot, v, cor]) => `<div class="card kpi" style="padding:18px 20px"><span class="rot">${rot}</span><span class="val" style="font-size:28px;color:${cor}">${v}</span></div>`).join('');
+    renderLista();
+  }
+
+  function renderLista() {
+    const f = $('filtro').value.trim().toLowerCase();
+    const lista = dados.lista.filter((v) => !f || v.nome.toLowerCase().includes(f));
+    const tagPresenca = {
+      presente: '<span class="tag tag-verde">Presente</span>',
+      aguardando: '<span class="tag tag-laranja">Aguardando</span>',
+      ausente: '<span class="tag tag-vermelho">Ausente</span>'
+    };
+    $('lista').innerHTML = lista.length ? lista.map((v) => {
+      const espera = v.status === 'espera';
+      const botoes = espera ? '<span class="ajuda">—</span>'
+        : v.presenca === 'presente'
+          ? `<button class="btn btn-secundario btn-pequeno" data-id="${v.id}" data-p="aguardando">Desfazer</button>`
+          : `<button class="btn btn-primario btn-pequeno" data-id="${v.id}" data-p="presente">Marcar presença</button>
+             ${v.presenca === 'aguardando' ? `<button class="btn btn-secundario btn-pequeno" data-id="${v.id}" data-p="ausente">Faltou</button>` : ''}`;
+      return `<tr>
+        <td><div style="display:flex;align-items:center;gap:10px"><div class="avatar" aria-hidden="true">${esc(iniciais(v.nome))}</div><b>${esc(v.nome)}</b></div></td>
+        <td style="white-space:nowrap">${esc(v.telefone || '—')}</td>
+        <td>${v.turnos_feitos}</td>
+        <td>${espera ? '<span class="tag tag-azul">Lista de espera</span>' : tagPresenca[v.presenca]}</td>
+        <td>${v.checkin_em ? esc(v.checkin_em.slice(11, 16)) : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">${botoes}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" class="vazio">Nenhum voluntário encontrado.</td></tr>';
+
+    document.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await api('PATCH', `/api/ong/inscricoes/${b.dataset.id}/presenca`, { presenca: b.dataset.p });
+        await carregar();
+      } catch (err) { toast(err.message, true); b.disabled = false; }
+    }));
+  }
+
+  $('filtro').addEventListener('input', renderLista);
+
+  // ---- Check-in por código ----
+  $('btn-checkin').onclick = () => { $('codigo').value = ''; $('dlg-msg').hidden = true; $('dlg-checkin').showModal(); $('codigo').focus(); };
+  async function confirmarCheckin() {
+    const msg = $('dlg-msg');
+    try {
+      const r = await api('POST', '/api/ong/checkin', { codigo: $('codigo').value, turno_id: Number(turnoId) });
+      msg.className = 'alerta alerta-ok';
+      msg.textContent = r.ja_registrado ? `${r.nome} já tinha feito check-in.` : `Presença de ${r.nome} registrada!`;
+      $('codigo').value = '';
+      carregar();
+    } catch (err) {
+      msg.className = 'alerta alerta-erro';
+      msg.textContent = err.message;
+    }
+    msg.hidden = false;
+    $('codigo').focus();
+  }
+  $('btn-confirmar').onclick = confirmarCheckin;
+  $('codigo').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmarCheckin(); } });
+</script>
+</body>
+</html>

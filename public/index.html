@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app app-branco">
+  <main class="login">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="logo" id="logo"></div>
+      <h1 style="font-size:30px;font-weight:800;letter-spacing:-.5px">Escala Solidária</h1>
+      <p style="font-size:16px;color:var(--muted)" id="subtitulo">Encontre turnos de voluntariado, doe para ONGs perto de você e acompanhe tudo o que já fez.</p>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span class="ajuda" style="font-weight:600">Como você quer entrar?</span>
+      <div class="segmentado" role="group" aria-label="Tipo de conta">
+        <button type="button" data-tipo="voluntario" aria-pressed="true">Voluntário ou doador</button>
+        <button type="button" data-tipo="ong" aria-pressed="false">Sou ONG</button>
+      </div>
+    </div>
+
+    <div id="erro" class="alerta alerta-erro" role="alert" hidden></div>
+
+    <!-- LOGIN -->
+    <form id="form-login" style="display:flex;flex-direction:column;gap:16px" novalidate>
+      <div class="campo"><label for="email">E-mail</label><input id="email" type="email" autocomplete="email" placeholder="voce@email.com" required></div>
+      <div class="campo"><label for="senha">Senha</label><input id="senha" type="password" autocomplete="current-password" placeholder="••••••••" required></div>
+      <button class="btn btn-primario btn-bloco" type="submit">Entrar</button>
+      <button class="btn btn-secundario btn-bloco" type="button" id="ir-cadastro">Criar conta</button>
+    </form>
+
+    <!-- CADASTRO -->
+    <form id="form-cadastro" style="display:flex;flex-direction:column;gap:16px" novalidate hidden>
+      <div class="campo" data-so="ong" hidden><label for="c-ong">Nome da ONG</label><input id="c-ong" type="text" placeholder="Ex.: Associação Mesa Cheia"></div>
+      <div class="campo"><label for="c-nome" id="c-nome-rotulo">Seu nome</label><input id="c-nome" type="text" autocomplete="name" required></div>
+      <div class="campo"><label for="c-email">E-mail</label><input id="c-email" type="email" autocomplete="email" required></div>
+      <div class="campo"><label for="c-tel">WhatsApp</label><input id="c-tel" type="tel" autocomplete="tel" placeholder="(11) 99999-9999"><span class="ajuda">Usado para os lembretes dos turnos.</span></div>
+      <div class="campo"><label for="c-senha">Senha</label><input id="c-senha" type="password" autocomplete="new-password" minlength="6" required><span class="ajuda">Mínimo de 6 caracteres.</span></div>
+      <button class="btn btn-primario btn-bloco" type="submit">Criar conta</button>
+      <button class="btn btn-secundario btn-bloco" type="button" id="ir-login">Já tenho conta</button>
+    </form>
+
+    <p class="ajuda" style="text-align:center;margin-top:auto;font-size:12px">Ao continuar, você concorda com os Termos de Uso e a Política de Privacidade (LGPD).</p>
+  </main>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  document.getElementById('logo').innerHTML = ICONE.logo.replace('width="20" height="20"', 'width="30" height="30"');
+  let tipo = 'voluntario';
+  const $ = (id) => document.getElementById(id);
+  const mostrarErro = (msg) => { $('erro').textContent = msg; $('erro').hidden = !msg; };
+
+  // Se já estiver logado, vai direto para a área certa
+  api('GET', '/api/auth/me').then(({ usuario }) => irPara(usuario)).catch(() => {});
+
+  function irPara(usuario) {
+    location.href = usuario.tipo === 'ong' ? '/ong/painel.html' : '/turnos.html';
+  }
+
+  document.querySelectorAll('[data-tipo]').forEach((b) => b.addEventListener('click', () => {
+    tipo = b.dataset.tipo;
+    document.querySelectorAll('[data-tipo]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    document.querySelectorAll('[data-so="ong"]').forEach((el) => { el.hidden = tipo !== 'ong'; });
+    $('c-nome-rotulo').textContent = tipo === 'ong' ? 'Nome do responsável' : 'Seu nome';
+  }));
+
+  $('ir-cadastro').onclick = () => { $('form-login').hidden = true; $('form-cadastro').hidden = false; mostrarErro(''); };
+  $('ir-login').onclick = () => { $('form-login').hidden = false; $('form-cadastro').hidden = true; mostrarErro(''); };
+
+  $('form-login').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    mostrarErro('');
+    try {
+      const { usuario } = await api('POST', '/api/auth/login', { email: $('email').value, senha: $('senha').value });
+      irPara(usuario);
+    } catch (err) { mostrarErro(err.message); }
+  });
+
+  $('form-cadastro').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    mostrarErro('');
+    try {
+      const { usuario } = await api('POST', '/api/auth/register', {
+        tipo, nome: $('c-nome').value, email: $('c-email').value, telefone: $('c-tel').value,
+        senha: $('c-senha').value, ong_nome: $('c-ong').value
+      });
+      irPara(usuario);
+    } catch (err) { mostrarErro(err.message); }
+  });
+</script>
+</body>
+</html>

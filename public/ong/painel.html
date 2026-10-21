@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel da ONG — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="painel">
+  <div id="menu"></div>
+  <main class="principal">
+    <div class="cabecalho">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <h1 id="titulo">Painel</h1>
+        <span class="sub" id="semana"></span>
+      </div>
+      <a class="btn btn-primario" href="/ong/novo-turno.html">+ Novo turno</a>
+    </div>
+
+    <section class="kpis" id="kpis" aria-label="Indicadores"></section>
+    <div id="alerta-doacoes"></div>
+
+    <div class="duas-colunas">
+      <section class="card larga">
+        <div class="card-cab"><h2>Próximos turnos</h2><a href="/ong/turnos.html" style="font-weight:700;font-size:14px;text-decoration:none">Ver todos</a></div>
+        <div class="tabela-wrap">
+          <table class="tabela" style="min-width:620px">
+            <thead><tr><th scope="col">Turno</th><th scope="col">Data</th><th scope="col">Vagas</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead>
+            <tbody id="proximos"><tr><td colspan="5" class="carregando">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card estreita" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+        <h2 style="font-size:17px">Atividade recente</h2>
+        <div id="atividade" style="display:flex;flex-direction:column;gap:14px"></div>
+      </section>
+    </div>
+  </main>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  (async () => {
+    const usuario = await exigirLogin('ong');
+    document.getElementById('menu').outerHTML = menuOng('painel', usuario);
+    const p = await api('GET', '/api/ong/painel');
+    document.getElementById('titulo').textContent = `Olá, equipe ${p.ong}`;
+    const hoje = new Date();
+    const fim = new Date(); fim.setDate(fim.getDate() + 7);
+    const f = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    document.getElementById('semana').textContent = `Próximos 7 dias: ${f(hoje)} a ${f(fim)}`;
+
+    const k = p.kpis;
+    const kpis = [
+      ['Turnos nos próximos 7 dias', k.turnos_semana, k.precisam_gente ? `${k.precisam_gente} com menos da metade das vagas preenchidas` : 'Todos com boa ocupação'],
+      ['Voluntários confirmados', k.inscritos_semana, 'nos turnos dos próximos 7 dias'],
+      ['Taxa de presença', k.taxa_presenca === null ? '—' : `${k.taxa_presenca}%`, 'turnos dos últimos 30 dias'],
+      ['Horas doadas no mês', fmtHoras(k.horas_mes), 'presenças confirmadas']
+    ];
+    document.getElementById('kpis').innerHTML = kpis.map(([r, v, d]) =>
+      `<div class="card kpi"><span class="rot">${r}</span><span class="val">${esc(v)}</span><span class="dica">${esc(d)}</span></div>`).join('');
+
+    document.getElementById('proximos').innerHTML = p.proximos.length ? p.proximos.map((t) => {
+      const pct = Math.round((t.ocupadas / t.vagas) * 100);
+      let tag;
+      if (t.status === 'rascunho') tag = '<span class="tag tag-cinza">Rascunho</span>';
+      else if (t.ocupadas >= t.vagas) tag = `<span class="tag tag-azul">Lotado${t.em_espera ? ` · ${t.em_espera} na espera` : ''}</span>`;
+      else if (t.ocupadas < t.vagas / 2) tag = '<span class="tag tag-laranja">Precisa de gente</span>';
+      else tag = '<span class="tag tag-verde">Aberto</span>';
+      return `<tr>
+        <td><b>${esc(t.titulo)}</b></td>
+        <td style="white-space:nowrap">${fmtData(t.data)} · ${fmtHora(t.hora_inicio)}</td>
+        <td><div style="display:flex;align-items:center;gap:10px"><div class="barra" style="width:80px"><span style="width:${pct}%"></span></div><b style="white-space:nowrap">${t.ocupadas}/${t.vagas}</b></div></td>
+        <td>${tag}</td>
+        <td style="text-align:right;white-space:nowrap"><a href="/ong/presenca.html?id=${t.id}" style="font-weight:700;text-decoration:none">Presença</a></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" class="vazio">Nenhum turno futuro. <a href="/ong/novo-turno.html">Criar um turno</a></td></tr>';
+
+    const doacoes = await api('GET', '/api/ong/doacoes');
+    const rd = doacoes.resumo;
+    if (rd.pix_pendentes || rd.itens_pendentes) {
+      document.getElementById('alerta-doacoes').innerHTML = `<div class="alerta alerta-aviso" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <span><b>Doações aguardando você:</b> ${rd.pix_pendentes} PIX para conferir no extrato e ${rd.itens_pendentes} entrega(s) de itens. Arrecadado via PIX no mês: <b>${brl(rd.pix_mes_centavos)}</b>.</span>
+        <a class="btn btn-primario btn-pequeno" href="/ong/doacoes.html">Ver doações</a></div>`;
+    }
+
+    const acao = (a) => {
+      if (a.presenca === 'presente') return `fez check-in em <b>${esc(a.titulo)}</b>`;
+      if (a.status === 'cancelada') return `cancelou a inscrição em <b>${esc(a.titulo)}</b>`;
+      if (a.status === 'espera') return `entrou na lista de espera de <b>${esc(a.titulo)}</b>`;
+      return `se inscreveu em <b>${esc(a.titulo)}</b> (${fmtDataCompleta(a.data)})`;
+    };
+    document.getElementById('atividade').innerHTML = p.atividade.length ? p.atividade.map((a) => `
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div class="avatar" style="width:32px;height:32px" aria-hidden="true">${esc(iniciais(a.nome))}</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:14px;line-height:1.4">${esc(a.nome)} ${acao(a)}</span>
+          <span class="ajuda" style="font-size:12px">${tempoRelativo(a.atualizado_em)}</span>
+        </div>
+      </div>`).join('') : '<p class="ajuda">Ainda não há atividade.</p>';
+  })().catch((err) => toast(err.message, true));
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detalhe do turno — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app app-branco">
+  <header class="topo-simples">
+    <a href="/turnos.html" aria-label="Voltar para turnos"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></a>
+    <span style="font-size:16px;font-weight:700">Detalhe do turno</span>
+  </header>
+  <main class="conteudo" id="conteudo" style="gap:20px"><div class="carregando">Carregando…</div></main>
+  <footer class="rodape-fixo" id="acoes" hidden></footer>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  const id = new URLSearchParams(location.search).get('id');
+  let turno;
+  let aviso = '';
+
+  (async () => {
+    await exigirLogin('voluntario');
+    carregar();
+  })();
+
+  async function carregar() {
+    try {
+      ({ turno } = await api('GET', `/api/turnos/${encodeURIComponent(id)}`));
+      render();
+    } catch (err) {
+      document.getElementById('conteudo').innerHTML = `<div class="alerta alerta-erro">${esc(err.message)}</div>`;
+    }
+  }
+
+  function render() {
+    const t = turno;
+    const tarefas = (t.descricao || '').split('\n').filter(Boolean);
+    const banner = aviso ? `<div class="alerta ${t.minha_inscricao === 'espera' ? 'alerta-aviso' : 'alerta-ok'}" role="status">${ICONE.ok}
+        <div style="display:flex;flex-direction:column;gap:2px"><b>${t.minha_inscricao === 'espera' ? 'Você está na lista de espera' : 'Inscrição confirmada!'}</b><span>${esc(aviso)}</span></div></div>` : '';
+    const cancelado = t.status === 'cancelado' ? '<div class="alerta alerta-erro">Este turno foi cancelado pela ONG.</div>' : '';
+
+    document.getElementById('conteudo').innerHTML = `
+      ${banner}${cancelado}
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <span class="tag tag-verde" style="align-self:flex-start">${esc(t.categoria)}</span>
+        <h1 style="font-size:24px;line-height:1.25;font-weight:800">${esc(t.titulo)}</h1>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar" style="border-radius:10px;background:var(--laranja-claro);color:#8A4A0B" aria-hidden="true">${esc(iniciais(t.ong_nome))}</div>
+          <div style="display:flex;flex-direction:column"><b style="font-size:14px">${esc(t.ong_nome)}</b><span class="ajuda">${esc(t.ong_cidade || '')}</span></div>
+        </div>
+      </div>
+      <div class="grade-info">
+        <div><span>Data</span><span>${fmtData(t.data)}</span></div>
+        <div><span>Horário</span><span>${fmtHorario(t.hora_inicio, t.hora_fim)}</span></div>
+        <div><span>Vagas</span><span>${t.vagas_livres} de ${t.vagas} livres</span></div>
+        <div><span>Duração</span><span>${fmtHoras(t.duracao)}</span></div>
+      </div>
+      ${tarefas.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2 style="font-size:16px">O que você vai fazer</h2>
+        <ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.6;color:var(--texto-2)">${tarefas.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></section>` : ''}
+      ${t.requisitos ? `<section style="display:flex;flex-direction:column;gap:8px"><h2 style="font-size:16px">O que levar</h2>
+        <p style="font-size:14px;line-height:1.6;color:var(--texto-2)">${esc(t.requisitos)}</p></section>` : ''}
+      <section style="display:flex;flex-direction:column;gap:8px"><h2 style="font-size:16px">Local</h2>
+        ${t.online ? '<p style="font-size:14px">Online — o link da videochamada é enviado no lembrete.</p>'
+          : `<p style="font-size:14px">${esc(t.endereco)}</p>
+             <a class="btn btn-secundario" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t.endereco)}">Abrir no mapa</a>`}
+      </section>`;
+
+    const acoes = document.getElementById('acoes');
+    acoes.hidden = t.status === 'cancelado';
+    if (!t.minha_inscricao) {
+      const lotado = t.vagas_livres === 0;
+      acoes.innerHTML = lotado && !t.lista_espera
+        ? '<button class="btn btn-primario btn-bloco" disabled>Turno lotado</button>'
+        : `<button class="btn btn-primario btn-bloco" id="btn-inscrever">${lotado ? 'Entrar na lista de espera' : 'Quero me inscrever'}</button>`;
+    } else {
+      acoes.innerHTML = `${t.minha_inscricao === 'confirmada' ? `<a class="btn btn-primario btn-bloco" href="/checkin.html?inscricao=${t.minha_inscricao_id}">${ICONE.qr} Ver meu QR de check-in</a>` : ''}
+        <button class="btn btn-perigo" id="btn-cancelar" style="height:44px">Cancelar inscrição</button>`;
+    }
+    document.getElementById('btn-inscrever')?.addEventListener('click', inscrever);
+    document.getElementById('btn-cancelar')?.addEventListener('click', cancelar);
+  }
+
+  async function inscrever(e) {
+    e.target.disabled = true;
+    try {
+      const r = await api('POST', `/api/turnos/${turno.id}/inscricao`);
+      aviso = r.mensagem;
+      await carregar();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) { toast(err.message, true); e.target.disabled = false; }
+  }
+
+  async function cancelar(e) {
+    if (!confirm('Tem certeza que quer cancelar sua inscrição? Sua vaga vai para outra pessoa.')) return;
+    e.target.disabled = true;
+    try {
+      await api('DELETE', `/api/turnos/${turno.id}/inscricao`);
+      aviso = '';
+      toast('Inscrição cancelada.');
+      await carregar();
+    } catch (err) { toast(err.message, true); e.target.disabled = false; }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doar — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app">
+  <header class="topo">
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <span style="font-size:14px;color:var(--muted)">Doe itens ou faça um PIX</span>
+      <h1 class="titulo-tela">ONGs precisando de ajuda</h1>
+    </div>
+  </header>
+  <main class="conteudo" id="lista" aria-live="polite"><div class="carregando">Carregando…</div></main>
+  <div id="tabbar"></div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  (async () => {
+    await exigirLogin('voluntario');
+    document.getElementById('tabbar').outerHTML = tabbar('doar');
+    const { ongs } = await api('GET', '/api/ongs');
+    const lista = document.getElementById('lista');
+    const comPedido = ongs.filter((o) => o.necessidades > 0 || o.tem_pix);
+    lista.innerHTML = comPedido.length ? comPedido.map((o) => `
+      <a class="card turno-card" href="/ong-perfil.html?id=${o.id}">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="avatar" style="width:44px;height:44px;border-radius:12px;background:var(--azul-claro);color:var(--azul-texto);font-size:14px" aria-hidden="true">${esc(iniciais(o.nome))}</div>
+          <div style="display:flex;flex-direction:column;min-width:0">
+            <span class="titulo">${esc(o.nome)}</span>
+            <span style="font-size:13px;color:var(--muted)">${esc(o.cidade || '')}</span>
+          </div>
+        </div>
+        <p style="font-size:14px;color:var(--texto-2)">${esc(o.descricao || '')}</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${o.urgentes ? `<span class="tag tag-laranja">${o.urgentes} ${o.urgentes === 1 ? 'pedido urgente' : 'pedidos urgentes'}</span>` : ''}
+          ${o.necessidades ? `<span class="tag tag-verde">${o.necessidades} ${o.necessidades === 1 ? 'item' : 'itens'} na lista</span>` : ''}
+          ${o.tem_pix ? '<span class="tag tag-azul">Aceita PIX</span>' : ''}
+        </div>
+      </a>`).join('') : '<div class="card vazio">Nenhuma ONG com pedidos de doação no momento.</div>';
+  })().catch((e) => toast(e.message, true));
+</script>
+</body>
+</html>

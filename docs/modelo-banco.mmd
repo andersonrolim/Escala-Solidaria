@@ -1,0 +1,109 @@
+erDiagram
+    USUARIOS ||--o| ONGS : "administra (se tipo = ong)"
+    ONGS ||--o{ TURNOS : "publica"
+    TURNOS ||--o{ INSCRICOES : "recebe"
+    USUARIOS ||--o{ INSCRICOES : "faz (se tipo = voluntario)"
+    INSCRICOES ||--o{ NOTIFICACOES : "gera"
+    ONGS ||--o{ NECESSIDADES : "pede"
+    NECESSIDADES ||--o{ DOACOES_ITENS : "recebe"
+    USUARIOS ||--o{ DOACOES_ITENS : "doa"
+    ONGS ||--o{ DOACOES_PIX : "recebe"
+    USUARIOS ||--o{ DOACOES_PIX : "faz"
+
+    USUARIOS {
+        int id PK
+        text nome
+        text email UK
+        text senha_hash
+        text telefone
+        text tipo "voluntario | ong"
+        text criado_em
+    }
+    ONGS {
+        int id PK
+        int usuario_id FK,UK
+        text nome
+        text descricao
+        text endereco
+        text cidade
+        text historia
+        text cnpj
+        text whatsapp
+        text pix_tipo "cpf | cnpj | email | telefone | aleatoria"
+        text pix_chave
+        text pix_nome
+        text pix_cidade
+        text criado_em
+    }
+    TURNOS {
+        int id PK
+        int ong_id FK
+        text titulo
+        text categoria
+        text descricao
+        text requisitos
+        text data "AAAA-MM-DD"
+        text hora_inicio "HH:MM"
+        text hora_fim "HH:MM"
+        int online "0 | 1"
+        text endereco
+        int vagas "maior que 0"
+        int lembrete_whatsapp
+        int lembrete_email
+        int lista_espera
+        text status "rascunho | publicado | cancelado"
+        text criado_em
+    }
+    INSCRICOES {
+        int id PK
+        int turno_id FK
+        int voluntario_id FK
+        text status "confirmada | espera | cancelada"
+        text presenca "aguardando | presente | ausente"
+        text codigo UK "codigo do QR, ex. ES-AB12CD"
+        text checkin_em
+        text criado_em
+        text atualizado_em
+    }
+    NOTIFICACOES {
+        int id PK
+        int inscricao_id FK
+        text canal "whatsapp | email"
+        text tipo "lembrete_24h | promovido_espera"
+        text mensagem
+        text enviado_em
+    }
+    NECESSIDADES {
+        int id PK
+        int ong_id FK
+        text nome
+        text categoria
+        text unidade "pacote | kg | litro | unidade | caixa | kit"
+        int meta "maior que 0"
+        int urgente "0 | 1"
+        text descricao
+        int ativa "0 | 1"
+        text criado_em
+    }
+    DOACOES_ITENS {
+        int id PK
+        int necessidade_id FK
+        int doador_id FK
+        int quantidade
+        text status "prometida | entregue | cancelada"
+        text previsao_entrega
+        text observacao
+        text criado_em
+        text entregue_em
+    }
+    DOACOES_PIX {
+        int id PK
+        int ong_id FK
+        int doador_id FK
+        int valor_centavos
+        text status "informada | confirmada | recusada"
+        text mensagem
+        text recibo_numero UK "REC-ano-numero"
+        text criado_em
+        text confirmado_em
+    }

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minhas doações — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app">
+  <main class="conteudo" style="padding-top:28px;gap:18px">
+    <h1 class="titulo-tela">Minhas doações</h1>
+
+    <section class="resumo-horas" aria-label="Resumo das doações">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span class="rotulo-claro">Você já ajudou</span>
+        <span><span class="numero" id="vezes">–</span> <span style="font-size:18px;font-weight:700" id="vezes-txt">vezes</span></span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+        <div style="display:flex;flex-direction:column"><b style="font-size:20px" id="total-pix">–</b><span class="rotulo-claro" style="font-size:12px">doados via PIX</span></div>
+        <div style="display:flex;flex-direction:column"><b style="font-size:20px" id="n-itens">–</b><span class="rotulo-claro" style="font-size:12px">entregas de itens</span></div>
+      </div>
+      <a class="btn" id="btn-declaracao" href="/api/me/doacoes/declaracao">Baixar declaração anual (PDF)</a>
+    </section>
+
+    <div class="segmentado" role="tablist" aria-label="Tipo de doação">
+      <button type="button" role="tab" id="aba-pix" aria-selected="true">PIX</button>
+      <button type="button" role="tab" id="aba-itens" aria-selected="false">Itens</button>
+    </div>
+    <div id="lista" aria-live="polite"><div class="carregando">Carregando…</div></div>
+    <a class="btn btn-contorno" href="/doar.html">Fazer uma nova doação</a>
+  </main>
+  <div id="tabbar"></div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  let dados;
+  let aba = 'pix';
+  const $ = (id) => document.getElementById(id);
+  $('btn-declaracao').innerHTML = `${ICONE.download} Baixar declaração anual (PDF)`;
+
+  (async () => {
+    await exigirLogin('voluntario');
+    $('tabbar').outerHTML = tabbar('doacoes');
+    await carregar();
+  })().catch((e) => toast(e.message, true));
+
+  async function carregar() {
+    dados = await api('GET', '/api/me/doacoes');
+    const r = dados.resumo;
+    $('vezes').textContent = r.vezes;
+    $('vezes-txt').textContent = r.vezes === 1 ? 'vez' : 'vezes';
+    $('total-pix').textContent = brl(r.total_pix_centavos);
+    $('n-itens').textContent = r.itens_entregues;
+    render();
+  }
+
+  $('aba-pix').onclick = () => { aba = 'pix'; render(); };
+  $('aba-itens').onclick = () => { aba = 'itens'; render(); };
+
+  const TAG_PIX = {
+    informada: '<span class="tag tag-laranja">Aguardando a ONG confirmar</span>',
+    confirmada: '<span class="tag tag-verde">Confirmada</span>',
+    recusada: '<span class="tag tag-vermelho">Não localizada pela ONG</span>'
+  };
+  const TAG_ITEM = {
+    prometida: '<span class="tag tag-laranja">A entregar</span>',
+    entregue: '<span class="tag tag-verde">Entregue</span>',
+    cancelada: '<span class="tag tag-cinza">Cancelada</span>'
+  };
+
+  function render() {
+    $('aba-pix').setAttribute('aria-selected', String(aba === 'pix'));
+    $('aba-itens').setAttribute('aria-selected', String(aba === 'itens'));
+    const lista = $('lista');
+    if (aba === 'pix') {
+      lista.innerHTML = dados.pix.length ? '<div style="display:flex;flex-direction:column;gap:12px">' + dados.pix.map((p) => `
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+              <b style="font-size:20px">${brl(p.valor_centavos)}</b>
+              <span class="ajuda">${esc(p.ong_nome)} · ${fmtDataCompleta(p.criado_em.slice(0, 10))}</span>
+            </div>
+            ${TAG_PIX[p.status]}
+          </div>
+          ${p.mensagem ? `<p style="font-size:14px;color:var(--texto-2)">“${esc(p.mensagem)}”</p>` : ''}
+          ${p.status === 'confirmada'
+            ? `<a class="btn btn-contorno" style="height:44px" href="/api/me/doacoes-pix/${p.id}/recibo">${ICONE.download} Recibo ${esc(p.recibo_numero)}</a>`
+            : p.status === 'informada' && waLink(p.ong_whatsapp, '')
+              ? `<a class="btn btn-secundario" style="height:44px" target="_blank" rel="noopener" href="${waLink(p.ong_whatsapp, `Olá! Fiz um PIX de ${brl(p.valor_centavos)} em ${fmtDataCompleta(p.criado_em.slice(0, 10))} pelo Escala Solidária. Podem confirmar quando possível?`)}">${ICONE_WHATS} Falar com a ONG</a>` : ''}
+        </div>`).join('') + '</div>'
+        : '<div class="card vazio">Você ainda não fez nenhuma doação via PIX.</div>';
+    } else {
+      lista.innerHTML = dados.itens.length ? '<div style="display:flex;flex-direction:column;gap:12px">' + dados.itens.map((i) => `
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+              <b style="font-size:16px">${i.quantidade} ${plural(i.unidade, i.quantidade)} — ${esc(i.nome)}</b>
+              <span class="ajuda">${esc(i.ong_nome)} · ${i.status === 'entregue' ? `entregue em ${fmtDataCompleta(i.entregue_em.slice(0, 10))}` : i.previsao_entrega ? `previsão ${fmtDataCompleta(i.previsao_entrega)}` : 'sem data combinada'}</span>
+            </div>
+            ${TAG_ITEM[i.status]}
+          </div>
+          ${i.status === 'prometida' ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${waLink(i.ong_whatsapp, '') ? `<a class="btn btn-whats btn-pequeno" target="_blank" rel="noopener" href="${waLink(i.ong_whatsapp, `Olá! Quero combinar a entrega de ${i.quantidade} ${plural(i.unidade, i.quantidade)} de "${i.nome}" que registrei no Escala Solidária.`)}">${ICONE_WHATS} Combinar entrega</a>` : ''}
+            <button class="btn btn-perigo btn-pequeno" data-cancelar="${i.id}">Cancelar</button></div>` : ''}
+        </div>`).join('') + '</div>'
+        : '<div class="card vazio">Você ainda não doou itens.</div>';
+      document.querySelectorAll('[data-cancelar]').forEach((b) => b.addEventListener('click', async () => {
+        if (!confirm('Cancelar esta doação?')) return;
+        try { await api('DELETE', `/api/me/doacoes-itens/${b.dataset.cancelar}`); toast('Doação cancelada.'); await carregar(); }
+        catch (err) { toast(err.message, true); }
+      }));
+    }
+  }
+</script>
+</body>
+</html>

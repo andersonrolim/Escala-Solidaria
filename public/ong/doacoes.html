@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doações — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="painel">
+  <div id="menu"></div>
+  <main class="principal">
+    <div class="cabecalho">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <h1>Doações</h1>
+        <span class="sub">Confirme os PIX, registre as entregas e mantenha a lista de necessidades em dia.</span>
+      </div>
+      <a class="btn btn-secundario" id="ver-publica" href="#">Ver página pública</a>
+    </div>
+
+    <section class="kpis" id="kpis" aria-label="Resumo das doações"></section>
+
+    <div class="segmentado" role="tablist" aria-label="Seções" style="grid-template-columns:repeat(3,minmax(0,1fr));max-width:620px">
+      <button type="button" role="tab" data-aba="pix" aria-selected="true">PIX</button>
+      <button type="button" role="tab" data-aba="itens" aria-selected="false">Itens doados</button>
+      <button type="button" role="tab" data-aba="necessidades" aria-selected="false">O que precisamos</button>
+    </div>
+
+    <!-- PIX -->
+    <section class="card" data-sec="pix">
+      <div class="card-cab"><h2>Doações via PIX</h2><span class="ajuda">Confira no extrato do banco antes de confirmar.</span></div>
+      <div class="tabela-wrap"><table class="tabela" style="min-width:860px">
+        <thead><tr><th scope="col">Doador</th><th scope="col">Valor</th><th scope="col">Informado em</th><th scope="col">Mensagem</th><th scope="col">Status</th><th scope="col" style="text-align:right">Ações</th></tr></thead>
+        <tbody id="tb-pix"></tbody>
+      </table></div>
+    </section>
+
+    <!-- Itens -->
+    <section class="card" data-sec="itens" hidden>
+      <div class="card-cab"><h2>Itens prometidos e recebidos</h2></div>
+      <div class="tabela-wrap"><table class="tabela" style="min-width:860px">
+        <thead><tr><th scope="col">Doador</th><th scope="col">Item</th><th scope="col">Qtd.</th><th scope="col">Previsão</th><th scope="col">Status</th><th scope="col" style="text-align:right">Ações</th></tr></thead>
+        <tbody id="tb-itens"></tbody>
+      </table></div>
+    </section>
+
+    <!-- Necessidades -->
+    <div class="duas-colunas" data-sec="necessidades" hidden>
+      <section class="card larga">
+        <div class="card-cab"><h2>Lista de necessidades</h2></div>
+        <div class="tabela-wrap"><table class="tabela" style="min-width:640px">
+          <thead><tr><th scope="col">Item</th><th scope="col">Progresso</th><th scope="col">Status</th><th scope="col" style="text-align:right">Ações</th></tr></thead>
+          <tbody id="tb-nec"></tbody>
+        </table></div>
+      </section>
+      <form class="card form-card estreita" id="form-nec" novalidate>
+        <h2 style="font-size:17px" id="form-nec-titulo">Novo item</h2>
+        <div id="erro-nec" class="alerta alerta-erro" role="alert" hidden></div>
+        <div class="campo"><label for="n-nome">O que vocês precisam? *</label><input id="n-nome" placeholder="Ex.: Fraldas tamanho G"></div>
+        <div class="campo"><label for="n-categoria">Categoria *</label><select id="n-categoria"></select></div>
+        <div class="grade-auto" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+          <div class="campo"><label for="n-meta">Meta *</label><input id="n-meta" type="number" min="1" value="10"></div>
+          <div class="campo"><label for="n-unidade">Unidade *</label><select id="n-unidade"></select></div>
+        </div>
+        <div class="campo"><label for="n-descricao">Detalhes</label><textarea id="n-descricao" rows="3" placeholder="Ex.: sem perfume, tamanho infantil…"></textarea></div>
+        <label class="check"><input type="checkbox" id="n-urgente"> Marcar como urgente</label>
+        <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+          <button class="btn btn-secundario" type="button" id="n-limpar">Limpar</button>
+          <button class="btn btn-primario" type="submit">Salvar item</button>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let usuario;
+  let necessidades = [];
+  let editandoId = null;
+
+  (async () => {
+    usuario = await exigirLogin('ong');
+    $('menu').outerHTML = menuOng('doacoes', usuario);
+    $('ver-publica').href = `/ong-perfil.html?id=${usuario.ongId}`;
+    const op = await api('GET', '/api/doacoes/opcoes');
+    $('n-categoria').innerHTML = op.categorias.map((c) => `<option>${esc(c)}</option>`).join('');
+    $('n-unidade').innerHTML = op.unidades.map((u) => `<option>${esc(u)}</option>`).join('');
+    const aba = new URLSearchParams(location.search).get('aba');
+    if (aba) trocarAba(aba);
+    await Promise.all([carregarDoacoes(), carregarNecessidades()]);
+  })().catch((e) => toast(e.message, true));
+
+  // ---- Abas ----
+  function trocarAba(aba) {
+    document.querySelectorAll('[data-aba]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === aba)));
+    document.querySelectorAll('[data-sec]').forEach((s) => { s.hidden = s.dataset.sec !== aba; });
+  }
+  document.querySelectorAll('[data-aba]').forEach((b) => b.addEventListener('click', () => trocarAba(b.dataset.aba)));
+
+  const contato = (nome, tel, texto) => {
+    const l = waLink(tel, texto);
+    return l ? `<a class="btn btn-whats btn-pequeno" target="_blank" rel="noopener" href="${l}" aria-label="WhatsApp de ${esc(nome)}">${ICONE_WHATS}</a>` : '';
+  };
+
+  // ---- PIX e itens ----
+  async function carregarDoacoes() {
+    const d = await api('GET', '/api/ong/doacoes');
+    const r = d.resumo;
+    $('kpis').innerHTML = [
+      ['PIX a confirmar', r.pix_pendentes, 'confira no extrato do banco'],
+      ['Arrecadado via PIX no mês', brl(r.pix_mes_centavos), 'somente PIX confirmados'],
+      ['Itens a receber', r.itens_pendentes, 'doações prometidas'],
+      ['Doadores', r.doadores, 'com doação confirmada']
+    ].map(([rot, v, dica]) => `<div class="card kpi"><span class="rot">${rot}</span><span class="val">${esc(v)}</span><span class="dica">${dica}</span></div>`).join('');
+
+    const tagPix = { informada: '<span class="tag tag-laranja">A confirmar</span>', confirmada: '<span class="tag tag-verde">Confirmada</span>', recusada: '<span class="tag tag-vermelho">Não localizada</span>' };
+    $('tb-pix').innerHTML = d.pix.length ? d.pix.map((p) => `<tr>
+      <td><div style="display:flex;align-items:center;gap:10px"><div class="avatar" aria-hidden="true">${esc(iniciais(p.doador_nome))}</div>
+        <div style="display:flex;flex-direction:column"><b>${esc(p.doador_nome)}</b><span class="ajuda" style="font-size:12px">${p.vezes_doador ? `${p.vezes_doador} doação(ões) confirmada(s)` : 'primeira doação'}</span></div></div></td>
+      <td><b>${brl(p.valor_centavos)}</b></td>
+      <td style="white-space:nowrap">${fmtDataCompleta(p.criado_em.slice(0, 10))} ${p.criado_em.slice(11, 16)}</td>
+      <td style="max-width:220px">${esc(p.mensagem || '—')}</td>
+      <td>${tagPix[p.status]}${p.recibo_numero ? `<br><span class="ajuda" style="font-size:12px">${esc(p.recibo_numero)}</span>` : ''}</td>
+      <td style="text-align:right;white-space:nowrap">
+        ${p.status === 'informada' ? `<button class="btn btn-primario btn-pequeno" data-pix="${p.id}" data-st="confirmada">Confirmar</button>
+          <button class="btn btn-secundario btn-pequeno" data-pix="${p.id}" data-st="recusada">Não localizei</button>` : ''}
+        ${p.status === 'confirmada' ? `<a class="btn btn-secundario btn-pequeno" href="/api/ong/doacoes-pix/${p.id}/recibo">Recibo</a>` : ''}
+        ${contato(p.doador_nome, p.doador_telefone, `Olá, ${p.doador_nome.split(' ')[0]}! Aqui é da ${usuario.ongNome}. Muito obrigado pelo PIX de ${brl(p.valor_centavos)}!`)}
+      </td></tr>`).join('') : '<tr><td colspan="6" class="vazio">Nenhuma doação via PIX ainda.</td></tr>';
+
+    const tagItem = { prometida: '<span class="tag tag-laranja">A receber</span>', entregue: '<span class="tag tag-verde">Recebido</span>', cancelada: '<span class="tag tag-cinza">Cancelado</span>' };
+    $('tb-itens').innerHTML = d.itens.length ? d.itens.map((i) => `<tr>
+      <td><b>${esc(i.doador_nome)}</b></td>
+      <td>${esc(i.nome)}${i.observacao ? `<br><span class="ajuda" style="font-size:12px">${esc(i.observacao)}</span>` : ''}</td>
+      <td style="white-space:nowrap">${i.quantidade} ${plural(i.unidade, i.quantidade)}</td>
+      <td>${i.previsao_entrega ? fmtDataCompleta(i.previsao_entrega) : '—'}</td>
+      <td>${tagItem[i.status]}</td>
+      <td style="text-align:right;white-space:nowrap">
+        ${i.status === 'prometida' ? `<button class="btn btn-primario btn-pequeno" data-item="${i.id}" data-st="entregue">Recebido</button>
+          <button class="btn btn-secundario btn-pequeno" data-item="${i.id}" data-st="cancelada">Cancelar</button>` : ''}
+        ${i.status === 'entregue' ? `<button class="btn btn-secundario btn-pequeno" data-item="${i.id}" data-st="prometida">Desfazer</button>` : ''}
+        ${contato(i.doador_nome, i.doador_telefone, `Olá, ${i.doador_nome.split(' ')[0]}! Aqui é da ${usuario.ongNome}, sobre a doação de ${i.quantidade} ${plural(i.unidade, i.quantidade)} de "${i.nome}". Podemos combinar a entrega?`)}
+      </td></tr>`).join('') : '<tr><td colspan="6" class="vazio">Nenhum item doado ainda.</td></tr>';
+
+    document.querySelectorAll('[data-pix]').forEach((b) => b.addEventListener('click', async () => {
+      const msg = b.dataset.st === 'confirmada' ? 'Confirma que o PIX caiu na conta? O recibo será liberado para o doador.' : 'Marcar como não localizado no extrato?';
+      if (!confirm(msg)) return;
+      try { await api('PATCH', `/api/ong/doacoes-pix/${b.dataset.pix}`, { status: b.dataset.st }); toast('Atualizado!'); carregarDoacoes(); }
+      catch (err) { toast(err.message, true); }
+    }));
+    document.querySelectorAll('[data-item]').forEach((b) => b.addEventListener('click', async () => {
+      try { await api('PATCH', `/api/ong/doacoes-itens/${b.dataset.item}`, { status: b.dataset.st }); toast('Atualizado!'); carregarDoacoes(); carregarNecessidades(); }
+      catch (err) { toast(err.message, true); }
+    }));
+  }
+
+  // ---- Necessidades ----
+  async function carregarNecessidades() {
+    ({ necessidades } = await api('GET', '/api/ong/necessidades'));
+    $('tb-nec').innerHTML = necessidades.length ? necessidades.map((n) => {
+      const pe = Math.min(100, (n.entregue / n.meta) * 100);
+      const pp = Math.min(100 - pe, (n.prometido / n.meta) * 100);
+      return `<tr>
+        <td><b>${esc(n.nome)}</b>${n.urgente ? ' <span class="tag tag-laranja">Urgente</span>' : ''}<br><span class="ajuda" style="font-size:12px">${esc(n.categoria)}</span></td>
+        <td style="min-width:200px"><div class="barra-dupla"><span class="ent" style="width:${pe}%"></span><span class="pro" style="width:${pp}%"></span></div>
+          <span class="ajuda" style="font-size:12px">${n.entregue} recebidos + ${n.prometido} prometidos de ${n.meta} ${plural(n.unidade, n.meta)}</span></td>
+        <td>${n.ativa ? '<span class="tag tag-verde">Ativo</span>' : '<span class="tag tag-cinza">Encerrado</span>'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-secundario btn-pequeno" data-editar="${n.id}">Editar</button>
+          <button class="btn btn-secundario btn-pequeno" data-alternar="${n.id}" data-acao="${n.ativa ? 'encerrar' : 'reabrir'}">${n.ativa ? 'Encerrar' : 'Reabrir'}</button>
+        </td></tr>`;
+    }).join('') : '<tr><td colspan="4" class="vazio">Cadastre o primeiro item que a ONG precisa.</td></tr>';
+
+    document.querySelectorAll('[data-editar]').forEach((b) => b.addEventListener('click', () => {
+      const n = necessidades.find((x) => x.id === Number(b.dataset.editar));
+      editandoId = n.id;
+      $('form-nec-titulo').textContent = 'Editar item';
+      $('n-nome').value = n.nome; $('n-categoria').value = n.categoria; $('n-meta').value = n.meta;
+      $('n-unidade').value = n.unidade; $('n-descricao').value = n.descricao || ''; $('n-urgente').checked = n.urgente;
+      $('n-nome').focus();
+    }));
+    document.querySelectorAll('[data-alternar]').forEach((b) => b.addEventListener('click', async () => {
+      try { await api('POST', `/api/ong/necessidades/${b.dataset.alternar}/${b.dataset.acao}`); carregarNecessidades(); }
+      catch (err) { toast(err.message, true); }
+    }));
+  }
+
+  function limparForm() {
+    editandoId = null;
+    $('form-nec-titulo').textContent = 'Novo item';
+    $('form-nec').reset();
+    $('erro-nec').hidden = true;
+  }
+  $('n-limpar').addEventListener('click', limparForm);
+
+  $('form-nec').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const corpo = { nome: $('n-nome').value, categoria: $('n-categoria').value, meta: Number($('n-meta').value),
+      unidade: $('n-unidade').value, descricao: $('n-descricao').value, urgente: $('n-urgente').checked };
+    try {
+      if (editandoId) await api('PUT', `/api/ong/necessidades/${editandoId}`, corpo);
+      else await api('POST', '/api/ong/necessidades', corpo);
+      toast('Item salvo!');
+      limparForm();
+      carregarNecessidades();
+    } catch (err) { $('erro-nec').textContent = err.message; $('erro-nec').hidden = false; }
+  });
+</script>
+</body>
+</html>

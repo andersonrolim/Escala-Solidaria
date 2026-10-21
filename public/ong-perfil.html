@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ONG — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app">
+  <header class="topo-simples">
+    <a href="/doar.html" aria-label="Voltar para a lista de ONGs"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></a>
+    <span style="font-size:16px;font-weight:700">Página da ONG</span>
+  </header>
+
+  <section class="ong-hero" id="hero"><div class="carregando">Carregando…</div></section>
+
+  <main class="conteudo" style="gap:18px">
+    <!-- PIX -->
+    <section class="card" id="sec-pix" style="padding:18px;display:flex;flex-direction:column;gap:14px" hidden>
+      <h2 style="font-size:18px">Doar via PIX</h2>
+      <div class="valores" role="group" aria-label="Escolha um valor">
+        <button type="button" data-v="20">R$ 20</button>
+        <button type="button" data-v="50" aria-pressed="true">R$ 50</button>
+        <button type="button" data-v="100">R$ 100</button>
+        <button type="button" data-v="">Outro</button>
+      </div>
+      <div class="campo" id="campo-outro" hidden><label for="valor-outro">Valor (R$)</label><input id="valor-outro" inputmode="decimal" placeholder="Ex.: 35,00"></div>
+      <div style="display:flex;justify-content:center"><div class="qr-box" style="padding:12px"><img id="qr" alt="QR Code PIX" style="width:200px;height:200px"></div></div>
+      <div class="campo">
+        <label for="copia">PIX copia e cola</label>
+        <div class="copia"><input id="copia" readonly><button class="btn btn-secundario btn-pequeno" type="button" id="btn-copiar">Copiar</button></div>
+        <span class="ajuda" id="recebedor"></span>
+      </div>
+      <div class="campo"><label for="mensagem">Mensagem para a ONG (opcional)</label><input id="mensagem" maxlength="200" placeholder="Ex.: Para as fraldas!"></div>
+      <button class="btn btn-primario btn-bloco" type="button" id="btn-fiz-pix">Já fiz o PIX</button>
+      <p class="ajuda">Depois que a ONG conferir o valor no extrato, o recibo em PDF fica disponível em <a href="/minhas-doacoes.html">Minhas doações</a>.</p>
+    </section>
+
+    <!-- Itens -->
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <h2 style="font-size:18px">O que estamos precisando</h2>
+      <div class="legenda"><span><i style="background:var(--verde)"></i>Já recebido</span><span><i style="background:#7FB8A9"></i>Prometido</span><span><i style="background:var(--borda)"></i>Falta</span></div>
+      <div id="necessidades" style="display:flex;flex-direction:column;gap:12px"></div>
+    </section>
+
+    <!-- História -->
+    <section class="card" style="padding:18px;display:flex;flex-direction:column;gap:10px" id="sec-historia" hidden>
+      <h2 style="font-size:18px">Nossa história</h2>
+      <p class="historia" id="historia"></p>
+    </section>
+  </main>
+  <div id="tabbar"></div>
+</div>
+
+<dialog id="dlg-item" aria-labelledby="dlg-item-titulo">
+  <form method="dialog" style="display:flex;flex-direction:column;gap:14px" id="form-item">
+    <h2 id="dlg-item-titulo" style="font-size:19px">Quero doar</h2>
+    <p class="ajuda" id="dlg-item-desc" style="font-size:14px"></p>
+    <div class="campo"><label for="qtd">Quantidade</label><input id="qtd" type="number" min="1" value="1"></div>
+    <div class="campo"><label for="previsao">Quando pretende entregar? (opcional)</label><input id="previsao" type="date"></div>
+    <div class="campo"><label for="obs">Observação (opcional)</label><input id="obs" maxlength="300" placeholder="Ex.: levo no sábado de manhã"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-secundario" value="fechar" formnovalidate>Cancelar</button>
+      <button class="btn btn-primario" type="button" id="btn-confirmar-item">Confirmar doação</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-ok" aria-labelledby="dlg-ok-titulo">
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <h2 id="dlg-ok-titulo" style="font-size:19px">Obrigado!</h2>
+    <p id="dlg-ok-msg" style="font-size:15px"></p>
+    <a class="btn btn-whats btn-bloco" id="dlg-ok-whats" target="_blank" rel="noopener" hidden></a>
+    <button class="btn btn-secundario btn-bloco" type="button" onclick="this.closest('dialog').close()">Fechar</button>
+  </div>
+</dialog>
+
+<script src="/js/api.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const ongId = new URLSearchParams(location.search).get('id');
+  let ong;
+  let usuario;
+  let valor = 50;
+  let itemAtual;
+
+  (async () => {
+    usuario = await exigirLogin('voluntario');
+    $('tabbar').outerHTML = tabbar('doar');
+    $('previsao').min = dataISO(0);
+    await carregar();
+  })().catch((e) => toast(e.message, true));
+
+  async function carregar() {
+    const dados = await api('GET', `/api/ongs/${encodeURIComponent(ongId)}`);
+    ong = dados.ong;
+    document.title = `${ong.nome} — Escala Solidária`;
+    const whats = waLink(ong.whatsapp, `Olá, ${ong.nome}! Vi a página de vocês no Escala Solidária e gostaria de ajudar.`);
+    $('hero').innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="avatar" style="width:56px;height:56px;border-radius:16px;background:var(--azul-claro);color:var(--azul-texto);font-size:18px" aria-hidden="true">${esc(iniciais(ong.nome))}</div>
+        <div style="display:flex;flex-direction:column"><h1 style="font-size:22px;font-weight:800;line-height:1.2">${esc(ong.nome)}</h1>
+          <span class="ajuda">${esc([ong.endereco, ong.cidade].filter(Boolean).join(' — '))}</span></div>
+      </div>
+      <p style="font-size:15px;color:var(--texto-2)">${esc(ong.descricao || '')}</p>
+      <div class="grade-info">
+        <div><span>Doadores</span><span>${dados.stats.doadores}</span></div>
+        <div><span>Turnos abertos</span><span>${dados.stats.turnos_abertos ? `<a href="/turnos.html">${dados.stats.turnos_abertos} — ver</a>` : '0'}</span></div>
+      </div>
+      ${whats ? `<a class="btn btn-whats" href="${whats}" target="_blank" rel="noopener">${ICONE_WHATS} Conversar no WhatsApp</a>` : ''}`;
+
+    if (ong.historia) { $('historia').textContent = ong.historia; $('sec-historia').hidden = false; }
+    if (ong.pix_chave) { $('sec-pix').hidden = false; atualizarPix(); }
+
+    $('necessidades').innerHTML = dados.necessidades.length ? dados.necessidades.map((n) => {
+      const pe = Math.min(100, (n.entregue / n.meta) * 100);
+      const pp = Math.min(100 - pe, (n.prometido / n.meta) * 100);
+      return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span class="tag tag-verde">${esc(n.categoria)}</span>${n.urgente ? '<span class="tag tag-laranja">Urgente</span>' : ''}
+        </div>
+        <b style="font-size:16px">${esc(n.nome)}</b>
+        ${n.descricao ? `<p style="font-size:14px;color:var(--muted)">${esc(n.descricao)}</p>` : ''}
+        <div class="progresso">
+          <div class="barra-dupla" role="img" aria-label="${n.entregue} recebidos e ${n.prometido} prometidos de ${n.meta}"><span class="ent" style="width:${pe}%"></span><span class="pro" style="width:${pp}%"></span></div>
+          <span style="font-size:13px;font-weight:600;color:var(--muted)">${n.entregue + n.prometido} de ${n.meta} ${plural(n.unidade, n.meta)} · ${n.falta ? `faltam ${n.falta}` : 'meta alcançada!'}</span>
+        </div>
+        <button class="btn btn-contorno" type="button" data-item="${n.id}">Quero doar</button>
+      </div>`;
+    }).join('') : '<div class="card vazio">Esta ONG não tem pedidos de itens no momento.</div>';
+
+    document.querySelectorAll('[data-item]').forEach((b) => b.addEventListener('click', () => {
+      itemAtual = dados.necessidades.find((n) => n.id === Number(b.dataset.item));
+      $('dlg-item-titulo').textContent = `Doar: ${itemAtual.nome}`;
+      $('dlg-item-desc').textContent = `Unidade: ${itemAtual.unidade}. Faltam ${itemAtual.falta}.`;
+      $('qtd').value = 1;
+      $('dlg-item').showModal();
+    }));
+  }
+
+  // ----- PIX -----
+  document.querySelectorAll('.valores button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.valores button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $('campo-outro').hidden = b.dataset.v !== '';
+    valor = b.dataset.v ? Number(b.dataset.v) : 0;
+    if (!b.dataset.v) $('valor-outro').focus();
+    atualizarPix();
+  }));
+  let timerValor;
+  $('valor-outro').addEventListener('input', () => {
+    valor = Number($('valor-outro').value.replace(/\./g, '').replace(',', '.')) || 0;
+    clearTimeout(timerValor);
+    timerValor = setTimeout(atualizarPix, 400);
+  });
+
+  async function atualizarPix() {
+    const r = await api('GET', `/api/ongs/${encodeURIComponent(ongId)}/pix?valor=${valor || ''}`);
+    $('qr').src = r.qr;
+    $('copia').value = r.payload;
+    $('recebedor').textContent = `Recebedor: ${r.recebedor} · Chave (${r.tipo}): ${r.chave}`;
+  }
+
+  $('btn-copiar').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('copia').value); toast('Código PIX copiado! Cole no app do seu banco.'); }
+    catch { $('copia').select(); toast('Selecione e copie o código manualmente.'); }
+  });
+
+  $('btn-fiz-pix').addEventListener('click', async (e) => {
+    if (!(valor >= 1)) return toast('Escolha ou digite um valor de pelo menos R$ 1,00.', true);
+    if (!confirm(`Confirma que fez um PIX de ${brl(Math.round(valor * 100))} para ${ong.nome}?`)) return;
+    e.target.disabled = true;
+    try {
+      const r = await api('POST', `/api/ongs/${encodeURIComponent(ongId)}/doacoes-pix`, { valor, mensagem: $('mensagem').value });
+      $('mensagem').value = '';
+      mostrarObrigado(r.mensagem, waLink(ong.whatsapp, `Olá! Acabei de fazer um PIX de ${brl(r.doacao.valor_centavos)} pelo Escala Solidária. Meu nome é ${usuario.nome}.`), 'Avisar a ONG no WhatsApp');
+    } catch (err) { toast(err.message, true); }
+    e.target.disabled = false;
+  });
+
+  // ----- Itens -----
+  $('btn-confirmar-item').addEventListener('click', async () => {
+    try {
+      const qtd = Number($('qtd').value);
+      const r = await api('POST', `/api/necessidades/${itemAtual.id}/doacoes`, {
+        quantidade: qtd, previsao_entrega: $('previsao').value, observacao: $('obs').value
+      });
+      $('dlg-item').close();
+      const quando = $('previsao').value ? ` Pretendo entregar em ${fmtDataCompleta($('previsao').value)}.` : '';
+      mostrarObrigado(r.mensagem,
+        waLink(ong.whatsapp, `Olá! Sou ${usuario.nome} e quero doar ${qtd} ${plural(itemAtual.unidade, qtd)} de "${itemAtual.nome}" pelo Escala Solidária.${quando} Como combinamos a entrega?`),
+        'Combinar entrega no WhatsApp');
+      $('obs').value = ''; $('previsao').value = '';
+      carregar();
+    } catch (err) { toast(err.message, true); }
+  });
+
+  function mostrarObrigado(msg, link, rotulo) {
+    $('dlg-ok-msg').textContent = msg;
+    const a = $('dlg-ok-whats');
+    a.hidden = !link;
+    if (link) { a.href = link; a.innerHTML = `${ICONE_WHATS} ${esc(rotulo)}`; }
+    $('dlg-ok').showModal();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Criar turno — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="painel">
+  <div id="menu"></div>
+  <main class="principal">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <a href="/ong/painel.html" style="font-size:14px;font-weight:700;text-decoration:none">← Voltar ao painel</a>
+      <h1 style="font-size:26px;font-weight:800" id="titulo-pagina">Criar novo turno</h1>
+      <span style="color:var(--muted)">Preencha os dados. O turno aparece para os voluntários assim que for publicado.</span>
+    </div>
+
+    <div class="duas-colunas">
+      <form class="card form-card larga" id="form" novalidate>
+        <div id="erro" class="alerta alerta-erro" role="alert" hidden></div>
+        <div class="campo"><label for="titulo">Título do turno *</label><input id="titulo" name="titulo" required placeholder="Ex.: Sopão comunitário — preparo e entrega"></div>
+        <div class="grade-auto">
+          <div class="campo"><label for="categoria">Categoria *</label><select id="categoria" name="categoria"></select></div>
+          <div class="campo"><label for="vagas">Número de vagas *</label><input id="vagas" name="vagas" type="number" min="1" max="500" value="8"></div>
+        </div>
+        <div class="campo"><label for="descricao">O que o voluntário vai fazer</label><textarea id="descricao" name="descricao" rows="4" placeholder="Uma tarefa por linha"></textarea></div>
+        <div class="grade-auto">
+          <div class="campo"><label for="data">Data *</label><input id="data" name="data" type="date"></div>
+          <div class="campo"><label for="hora_inicio">Início *</label><input id="hora_inicio" name="hora_inicio" type="time" value="09:00"></div>
+          <div class="campo"><label for="hora_fim">Término *</label><input id="hora_fim" name="hora_fim" type="time" value="12:00"></div>
+        </div>
+        <fieldset>
+          <legend>Onde acontece?</legend>
+          <div style="display:flex;flex-wrap:wrap;gap:20px">
+            <label class="check"><input type="radio" name="local" value="presencial" checked> Presencial</label>
+            <label class="check"><input type="radio" name="local" value="online"> Online</label>
+          </div>
+          <div class="campo" id="campo-endereco" style="margin-top:8px"><label for="endereco">Endereço *</label><input id="endereco" name="endereco" placeholder="Rua, número, bairro — cidade"></div>
+        </fieldset>
+        <div class="campo"><label for="requisitos">O que levar / requisitos</label><input id="requisitos" name="requisitos" placeholder="Ex.: sapato fechado, maior de 16 anos"></div>
+        <fieldset class="caixa">
+          <legend>Lembretes e vagas</legend>
+          <label class="check"><input type="checkbox" id="lembrete_whatsapp" checked> Enviar lembrete 24h antes por WhatsApp</label>
+          <label class="check"><input type="checkbox" id="lembrete_email" checked> Enviar lembrete 24h antes por e-mail</label>
+          <label class="check"><input type="checkbox" id="lista_espera"> Abrir lista de espera quando lotar</label>
+        </fieldset>
+        <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:12px">
+          <a class="btn btn-secundario" href="/ong/painel.html">Cancelar</a>
+          <button class="btn btn-contorno" type="button" id="btn-rascunho">Salvar rascunho</button>
+          <button class="btn btn-primario" type="submit" id="btn-publicar">Publicar turno</button>
+        </div>
+      </form>
+
+      <aside class="estreita" aria-label="Pré-visualização" style="display:flex;flex-direction:column;gap:10px">
+        <span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Como o voluntário vai ver</span>
+        <div class="card turno-card" style="box-shadow:0 8px 24px rgba(27,36,48,.06)">
+          <span class="tag tag-verde" id="p-cat" style="align-self:flex-start"></span>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span class="titulo" id="p-titulo"></span>
+            <span style="font-size:14px;color:var(--muted)" id="p-ong"></span>
+          </div>
+          <span class="linha-info" id="p-quando"></span>
+          <span class="linha-info" id="p-local"></span>
+          <div class="barra"></div>
+          <span style="font-size:13px;font-weight:600;color:var(--muted)" id="p-vagas"></span>
+        </div>
+        <p class="ajuda">Campos com * são obrigatórios. Depois de publicado, você ainda pode editar o turno.</p>
+      </aside>
+    </div>
+  </main>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const editarId = new URLSearchParams(location.search).get('id');
+  let usuario;
+
+  (async () => {
+    usuario = await exigirLogin('ong');
+    $('menu').outerHTML = menuOng(editarId ? 'turnos' : 'novo', usuario);
+    const { categorias } = await api('GET', '/api/turnos/categorias');
+    $('categoria').innerHTML = categorias.map((c) => `<option>${esc(c)}</option>`).join('');
+    $('data').value = dataISO(1);
+    $('data').min = dataISO(0);
+
+    if (editarId) {
+      const { turno: t } = await api('GET', `/api/ong/turnos/${encodeURIComponent(editarId)}`);
+      $('titulo-pagina').textContent = 'Editar turno';
+      document.title = 'Editar turno — Escala Solidária';
+      $('btn-publicar').textContent = 'Salvar e publicar';
+      for (const c of ['titulo', 'categoria', 'vagas', 'descricao', 'data', 'hora_inicio', 'hora_fim', 'endereco', 'requisitos']) $(c).value = t[c] ?? '';
+      for (const c of ['lembrete_whatsapp', 'lembrete_email', 'lista_espera']) $(c).checked = !!t[c];
+      document.querySelector(`[name=local][value=${t.online ? 'online' : 'presencial'}]`).checked = true;
+    }
+    atualizarLocal();
+    preview();
+  })();
+
+  function atualizarLocal() {
+    $('campo-endereco').hidden = document.querySelector('[name=local]:checked').value === 'online';
+  }
+  document.querySelectorAll('[name=local]').forEach((r) => r.addEventListener('change', () => { atualizarLocal(); preview(); }));
+  $('form').addEventListener('input', preview);
+
+  function preview() {
+    const online = document.querySelector('[name=local]:checked').value === 'online';
+    const v = Math.max(0, parseInt($('vagas').value, 10) || 0);
+    $('p-cat').textContent = $('categoria').value;
+    $('p-titulo').textContent = $('titulo').value.trim() || 'Título do turno';
+    $('p-ong').textContent = usuario?.ongNome || '';
+    $('p-quando').innerHTML = ICONE.calendario + esc($('data').value ? `${fmtData($('data').value)} · ${fmtHorario($('hora_inicio').value || '00:00', $('hora_fim').value || '00:00')}` : 'Data a definir');
+    $('p-local').innerHTML = ICONE.local + esc(online ? 'Online (videochamada)' : ($('endereco').value || 'Endereço'));
+    $('p-vagas').textContent = `${v} ${v === 1 ? 'vaga livre' : 'vagas livres'} de ${v}`;
+  }
+
+  function dadosForm(status) {
+    return {
+      titulo: $('titulo').value, categoria: $('categoria').value, vagas: Number($('vagas').value),
+      descricao: $('descricao').value, data: $('data').value, hora_inicio: $('hora_inicio').value, hora_fim: $('hora_fim').value,
+      online: document.querySelector('[name=local]:checked').value === 'online', endereco: $('endereco').value,
+      requisitos: $('requisitos').value, lembrete_whatsapp: $('lembrete_whatsapp').checked,
+      lembrete_email: $('lembrete_email').checked, lista_espera: $('lista_espera').checked, status
+    };
+  }
+
+  async function salvar(status) {
+    $('erro').hidden = true;
+    try {
+      if (editarId) await api('PUT', `/api/ong/turnos/${encodeURIComponent(editarId)}`, dadosForm(status));
+      else await api('POST', '/api/ong/turnos', dadosForm(status));
+      location.href = status === 'rascunho' ? '/ong/turnos.html' : '/ong/painel.html';
+    } catch (err) {
+      $('erro').textContent = err.message;
+      $('erro').hidden = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  $('form').addEventListener('submit', (e) => { e.preventDefault(); salvar('publicado'); });
+  $('btn-rascunho').addEventListener('click', () => salvar('rascunho'));
+</script>
+</body>
+</html>

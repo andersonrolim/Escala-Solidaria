@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perfil, PIX e WhatsApp — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="painel">
+  <div id="menu"></div>
+  <main class="principal">
+    <div class="cabecalho">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <h1>Perfil, PIX e WhatsApp</h1>
+        <span class="sub">Essas informações aparecem na página pública da ONG.</span>
+      </div>
+      <a class="btn btn-secundario" id="ver-publica" href="#">Ver página pública</a>
+    </div>
+
+    <div class="duas-colunas">
+      <form class="card form-card larga" id="form" novalidate>
+        <div id="erro" class="alerta alerta-erro" role="alert" hidden></div>
+        <fieldset style="display:flex;flex-direction:column;gap:16px">
+          <legend style="font-size:17px">Sobre a ONG</legend>
+          <div class="grade-auto">
+            <div class="campo"><label for="nome">Nome da ONG *</label><input id="nome"></div>
+            <div class="campo"><label for="cnpj">CNPJ</label><input id="cnpj" placeholder="00.000.000/0000-00"></div>
+          </div>
+          <div class="campo"><label for="descricao">Descrição curta</label><input id="descricao" maxlength="300" placeholder="Uma frase que resume o trabalho da ONG"></div>
+          <div class="campo"><label for="historia">Nossa história</label><textarea id="historia" rows="8" maxlength="4000" placeholder="Conte como a ONG começou, quem vocês atendem e por que cada doação importa."></textarea></div>
+          <div class="grade-auto">
+            <div class="campo"><label for="endereco">Endereço</label><input id="endereco"></div>
+            <div class="campo"><label for="cidade">Cidade</label><input id="cidade"></div>
+          </div>
+        </fieldset>
+
+        <fieldset class="caixa" style="display:flex;flex-direction:column;gap:12px">
+          <legend>WhatsApp</legend>
+          <div class="campo"><label for="whatsapp">Número com DDD</label><input id="whatsapp" type="tel" placeholder="(11) 99999-9999">
+            <span class="ajuda">Doadores e voluntários vão poder chamar a ONG direto por este número.</span></div>
+        </fieldset>
+
+        <fieldset class="caixa" style="display:flex;flex-direction:column;gap:12px">
+          <legend>Chave PIX para doações</legend>
+          <div class="grade-auto">
+            <div class="campo"><label for="pix_tipo">Tipo da chave</label>
+              <select id="pix_tipo"><option value="">Sem PIX</option><option value="cnpj">CNPJ</option><option value="cpf">CPF</option><option value="email">E-mail</option><option value="telefone">Telefone</option><option value="aleatoria">Chave aleatória</option></select></div>
+            <div class="campo"><label for="pix_chave">Chave</label><input id="pix_chave"></div>
+          </div>
+          <div class="grade-auto">
+            <div class="campo"><label for="pix_nome">Nome do recebedor (até 25 letras)</label><input id="pix_nome" maxlength="25"></div>
+            <div class="campo"><label for="pix_cidade">Cidade do recebedor (até 15 letras)</label><input id="pix_cidade" maxlength="15"></div>
+          </div>
+          <span class="ajuda">Use de preferência uma chave no CNPJ da ONG, para o dinheiro cair na conta da instituição e não na de uma pessoa.</span>
+        </fieldset>
+
+        <div style="display:flex;justify-content:flex-end"><button class="btn btn-primario" type="submit">Salvar</button></div>
+      </form>
+
+      <aside class="estreita card" style="padding:20px;display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center">
+        <b>Teste do QR Code PIX</b>
+        <div id="qr-area" class="ajuda">Salve uma chave PIX para ver o QR Code que os doadores vão usar.</div>
+        <p class="ajuda">Dica: faça um PIX de R$ 1,00 lendo este QR com o seu celular para conferir se a chave está certa.</p>
+      </aside>
+    </div>
+  </main>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const CAMPOS = ['nome', 'cnpj', 'descricao', 'historia', 'endereco', 'cidade', 'whatsapp', 'pix_tipo', 'pix_chave', 'pix_nome', 'pix_cidade'];
+  let ongId;
+
+  (async () => {
+    const usuario = await exigirLogin('ong');
+    $('menu').outerHTML = menuOng('perfil', usuario);
+    ongId = usuario.ongId;
+    $('ver-publica').href = `/ong-perfil.html?id=${ongId}`;
+    const { ong } = await api('GET', '/api/ong/perfil');
+    CAMPOS.forEach((c) => { $(c).value = ong[c] || ''; });
+    mostrarQr(ong);
+  })().catch((e) => toast(e.message, true));
+
+  async function mostrarQr(ong) {
+    if (!ong.pix_chave) return;
+    const r = await api('GET', `/api/ongs/${ongId}/pix?valor=1`);
+    $('qr-area').innerHTML = `<img src="${r.qr}" alt="QR Code PIX de teste de R$ 1,00" style="width:200px;height:200px"><br><span class="ajuda">${esc(r.recebedor)} · ${esc(r.chave)}</span>`;
+  }
+
+  $('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('erro').hidden = true;
+    const corpo = Object.fromEntries(CAMPOS.map((c) => [c, $(c).value]));
+    try {
+      const { ong } = await api('PUT', '/api/ong/perfil', corpo);
+      toast('Perfil salvo!');
+      $('pix_chave').value = ong.pix_chave || '';
+      mostrarQr(ong);
+    } catch (err) {
+      $('erro').textContent = err.message;
+      $('erro').hidden = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
+</script>
+</body>
+</html>
