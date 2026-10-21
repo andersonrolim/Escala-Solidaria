@@ -1,7 +1,7 @@
 const express = require('express');
 const session = require('express-session');
-const MemoryStore = require('memorystore')(session);
 const path = require('path');
+const { SessoesNoBanco } = require('./sessoes');
 const { rotasAuth } = require('./rotas/auth');
 const { rotasTurnos, rotasMe } = require('./rotas/voluntario');
 const { rotasOng } = require('./rotas/ong');
@@ -25,8 +25,8 @@ function criarApp(db, { segredoSessao = process.env.SESSION_SECRET || 'troque-es
     secret: segredoSessao,
     resave: false,
     saveUninitialized: false,
-    store: new MemoryStore({ checkPeriod: 1000 * 60 * 60 }), // limpa sessões vencidas a cada hora
-    cookie: { httpOnly: true, sameSite: 'lax', secure: producao, maxAge: 1000 * 60 * 60 * 8 }
+    store: new SessoesNoBanco(db),                          // sobrevive a reinícios do servidor
+    cookie: { httpOnly: true, sameSite: 'lax', secure: producao, maxAge: 1000 * 60 * 60 * 24 * 7 } // 7 dias
   }));
 
   app.use('/api/auth', rotasAuth(db));

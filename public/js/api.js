@@ -10,7 +10,11 @@ async function api(metodo, url, corpo) {
   const resp = await fetch(url, opcoes);
   const dados = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    const erro = new Error(dados.erro || 'Algo deu errado. Tente novamente.');
+    let msg = dados.erro || 'Algo deu errado. Tente novamente.';
+    if (resp.status === 401 && !url.startsWith('/api/auth/')) {
+      msg = 'Sua sessão expirou. Entre novamente (abra o sistema em outra aba) e depois clique em salvar de novo.';
+    }
+    const erro = new Error(msg);
     erro.status = resp.status;
     throw erro;
   }

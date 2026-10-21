@@ -140,9 +140,16 @@ CREATE INDEX IF NOT EXISTS idx_inscricoes_vol ON inscricoes (voluntario_id);
 CREATE INDEX IF NOT EXISTS idx_necessidades_ong ON necessidades (ong_id);
 CREATE INDEX IF NOT EXISTS idx_doacoes_itens_doador ON doacoes_itens (doador_id);
 CREATE INDEX IF NOT EXISTS idx_doacoes_pix_doador ON doacoes_pix (doador_id);
+
+-- Sessões de login guardadas no banco: assim um reinício do servidor não desloga ninguém
+CREATE TABLE IF NOT EXISTS sessoes (
+  sid     TEXT    PRIMARY KEY,
+  dados   TEXT    NOT NULL,
+  expira  INTEGER NOT NULL                       -- milissegundos desde 1970
+);
 `;
 
-const TABELAS = ['doacoes_pix', 'doacoes_itens', 'necessidades', 'notificacoes', 'inscricoes', 'turnos', 'ongs', 'usuarios'];
+const TABELAS = ['sessoes', 'doacoes_pix', 'doacoes_itens', 'necessidades', 'notificacoes', 'inscricoes', 'turnos', 'ongs', 'usuarios'];
 const COLUNAS_NOVAS_ONG = ['historia', 'cnpj', 'whatsapp', 'pix_tipo', 'pix_chave', 'pix_nome', 'pix_cidade'];
 
 // ------------------------------------------------------------------ SQLite
