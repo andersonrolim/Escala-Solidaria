@@ -191,7 +191,7 @@ dialog::backdrop { background: rgba(27,36,48,.45); }
 }
 
 /* ===== Doações ===== */
-.tabbar { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tabbar { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .tabbar a, .tabbar button { font-size: 11px; }
 .progresso { display: flex; flex-direction: column; gap: 6px; }
 .barra-dupla { height: 8px; border-radius: 999px; background: var(--borda); overflow: hidden; display: flex; }

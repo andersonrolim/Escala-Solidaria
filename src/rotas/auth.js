@@ -66,7 +66,58 @@ function rotasAuth(db) {
     req.session.destroy(() => res.json({ ok: true }));
   });
 
-  r.get('/me', exigir(), (req, res) => res.json({ usuario: req.session.usuario }));
+  r.get('/me', exigir(), async (req, res) => {
+    const usuario = await db.get('SELECT id, nome, email, telefone, tipo FROM usuarios WHERE id = ?', req.session.usuario.id);
+    if (!usuario) throw new ErroHttp(404, 'Conta não encontrada.');
+    const ong = usuario.tipo === 'ong' ? await db.get('SELECT id, nome FROM ongs WHERE usuario_id = ?', usuario.id) : null;
+    res.json({ usuario: { ...usuario, ongId: ong?.id ?? null, ongNome: ong?.nome ?? null } });
+  });
+
+  r.put('/me', exigir(), async (req, res) => {
+    const id = req.session.usuario.id;
+    const nome = String(req.body.nome || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const telefone = String(req.body.telefone || '').trim();
+    const senhaAtual = String(req.body.senha_atual || '');
+    const novaSenha = String(req.body.nova_senha || '');
+    const erros = [];
+
+    if (nome.length < 2 || nome.length > 120) erros.push('O nome deve ter entre 2 e 120 caracteres.');
+    if (!RE_EMAIL.test(email) || email.length > 254) erros.push('Informe um e-mail válido.');
+    if (telefone.length > 30) erros.push('O telefone deve ter no máximo 30 caracteres.');
+    if (Boolean(senhaAtual) !== Boolean(novaSenha)) erros.push('Para trocar a senha, informe a senha atual e a nova senha.');
+    if (novaSenha && novaSenha.length < 6) erros.push('A nova senha precisa ter pelo menos 6 caracteres.');
+    if (erros.length) throw new ErroHttp(400, erros.join(' '));
+
+    const existente = await db.get('SELECT id FROM usuarios WHERE email = ? AND id != ?', email, id);
+    if (existente) throw new ErroHttp(409, 'Já existe uma conta com este e-mail.');
+
+    const usuarioAtual = await db.get('SELECT senha_hash FROM usuarios WHERE id = ?', id);
+    if (!usuarioAtual) throw new ErroHttp(404, 'Conta não encontrada.');
+    if (senhaAtual && !bcrypt.compareSync(senhaAtual, usuarioAtual.senha_hash)) {
+      throw new ErroHttp(401, 'A senha atual está incorreta.');
+    }
+
+    if (novaSenha) {
+      await db.run('UPDATE usuarios SET nome = ?, email = ?, telefone = ?, senha_hash = ? WHERE id = ?',
+        nome, email, telefone, bcrypt.hashSync(novaSenha, 10), id);
+    } else {
+      await db.run('UPDATE usuarios SET nome = ?, email = ?, telefone = ? WHERE id = ?', nome, email, telefone, id);
+    }
+
+    const ong = req.session.usuario.tipo === 'ong'
+      ? await db.get('SELECT id, nome FROM ongs WHERE usuario_id = ?', id)
+      : null;
+    req.session.usuario = {
+      ...req.session.usuario,
+      nome,
+      email,
+      telefone,
+      ongId: ong?.id ?? null,
+      ongNome: ong?.nome ?? null
+    };
+    res.json({ usuario: req.session.usuario });
+  });
 
   return r;
 }

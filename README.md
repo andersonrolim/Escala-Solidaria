@@ -12,6 +12,7 @@ O caso de uso de demonstração é a **Associação Girassol Azul**, uma creche 
 
 **Voluntário (app para celular)**
 - Cadastro e login
+- Minha conta: alterar nome, e-mail, telefone e senha
 - Lista de turnos futuros com busca e filtro por categoria
 - Detalhe do turno, com inscrição ou cancelamento
 - Lista de espera automática quando o turno lota (se a ONG ativou essa opção)
@@ -28,6 +29,7 @@ O caso de uso de demonstração é a **Associação Girassol Azul**, uma creche 
 
 **ONG (painel web, também funciona no celular)**
 - Painel com indicadores: turnos da semana, confirmados, taxa de presença e horas no mês
+- Minha conta do responsável separada do perfil público da instituição
 - Criação, edição e cancelamento de turnos, além de rascunhos
 - Lista de presença com check-in por código, presença ou falta marcada manualmente e opção de desfazer
 - Exportação da lista de presença em CSV (abre no Excel)
@@ -122,7 +124,9 @@ escala-solidaria/
 │       ├── recibos.js       # Recibo e declaração anual em PDF (pdfkit)
 │       └── extenso.js       # Valor por extenso no recibo
 ├── public/                  # Front-end (servido como arquivos estáticos)
-│   ├── index.html           # 1. Entrar / criar conta
+│   ├── index.html           # Landing page responsiva do produto
+│   ├── login.html           # Entrar / criar conta
+│   ├── conta.html           # Editar dados pessoais e senha
 │   ├── turnos.html          # 2. Turnos disponíveis
 │   ├── turno.html           # 3. Detalhe e inscrição
 │   ├── meus-turnos.html     # 4. Meus turnos e horas

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minha conta — Escala Solidária</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app" id="shell">
+  <header class="topo" id="cabecalho">
+    <span style="font-size:14px;color:var(--muted)">Seus dados de acesso e contato</span>
+    <h1 class="titulo-tela">Minha conta</h1>
+  </header>
+  <main class="conteudo" id="principal">
+    <section class="card form-card">
+      <p class="ajuda" id="contexto">Atualize seu nome, e-mail e telefone usados no cadastro.</p>
+      <div id="erro-conta" class="alerta alerta-erro" role="alert" hidden></div>
+      <form id="form-conta" style="display:flex;flex-direction:column;gap:16px" novalidate>
+        <div class="campo"><label for="nome">Nome *</label><input id="nome" autocomplete="name" required maxlength="120"></div>
+        <div class="campo"><label for="email">E-mail *</label><input id="email" type="email" autocomplete="email" required maxlength="254"></div>
+        <div class="campo"><label for="telefone">Telefone / WhatsApp</label><input id="telefone" type="tel" autocomplete="tel" maxlength="30"></div>
+        <fieldset style="display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--borda);padding-top:16px">
+          <legend>Alterar senha (opcional)</legend>
+          <p class="ajuda">Deixe em branco para manter a senha atual.</p>
+          <div class="campo"><label for="senha-atual">Senha atual</label><input id="senha-atual" type="password" autocomplete="current-password"></div>
+          <div class="campo"><label for="senha-nova">Nova senha</label><input id="senha-nova" type="password" autocomplete="new-password" minlength="6"><span class="ajuda">Mínimo de 6 caracteres.</span></div>
+        </fieldset>
+        <button class="btn btn-primario btn-bloco" type="submit">Salvar alterações</button>
+      </form>
+      <a class="btn btn-secundario btn-bloco" id="link-perfil-ong" href="/ong/perfil.html" hidden>Editar perfil público da ONG</a>
+    </section>
+  </main>
+  <div id="tabbar"></div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let usuario;
+
+  (async () => {
+    const resposta = await api('GET', '/api/auth/me');
+    usuario = resposta.usuario;
+    $('nome').value = usuario.nome || '';
+    $('email').value = usuario.email || '';
+    $('telefone').value = usuario.telefone || '';
+
+    if (usuario.tipo === 'ong') {
+      document.title = 'Minha conta — Escala Solidária';
+      $('shell').className = 'painel';
+      const menu = document.createElement('div');
+      menu.innerHTML = menuOng('conta', usuario);
+      const menuOngElement = menu.firstElementChild;
+      menuOngElement.id = 'menu';
+      $('shell').insertBefore(menuOngElement, $('cabecalho'));
+      $('cabecalho').remove();
+      $('principal').className = 'principal';
+      $('tabbar').remove();
+      $('contexto').textContent = 'Dados pessoais do responsável pela conta. O perfil público da instituição é editado separadamente.';
+      $('link-perfil-ong').hidden = false;
+    } else {
+      $('tabbar').outerHTML = tabbar('conta');
+    }
+  })().catch((err) => {
+    $('erro-conta').textContent = err.message;
+    $('erro-conta').hidden = false;
+  });
+
+  $('form-conta').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('erro-conta').hidden = true;
+    const botao = $('form-conta').querySelector('[type="submit"]');
+    botao.disabled = true;
+    try {
+      const resposta = await api('PUT', '/api/auth/me', {
+        nome: $('nome').value,
+        email: $('email').value,
+        telefone: $('telefone').value,
+        senha_atual: $('senha-atual').value,
+        nova_senha: $('senha-nova').value
+      });
+      usuario = resposta.usuario;
+      $('senha-atual').value = '';
+      $('senha-nova').value = '';
+      if (usuario.tipo === 'ong') $('menu').outerHTML = menuOng('conta', usuario).replace('<aside class="menu-lateral">', '<aside class="menu-lateral" id="menu">');
+      toast('Dados da conta atualizados.');
+    } catch (err) {
+      $('erro-conta').textContent = err.message;
+      $('erro-conta').hidden = false;
+    } finally {
+      botao.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

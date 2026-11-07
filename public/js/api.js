@@ -34,7 +34,7 @@ async function exigirLogin(tipo) {
     }
     return usuario;
   } catch {
-    location.href = '/index.html';
+    location.href = '/login.html';
     return new Promise(() => {});
   }
 }
@@ -117,6 +117,7 @@ function tabbar(ativa) {
     ${item('/doar.html', 'doar', 'Doar', '<path d="M12 20s-7-4.4-7-9.5A4 4 0 0 1 12 8a4 4 0 0 1 7 2.5C19 15.6 12 20 12 20z"/>')}
     ${item('/meus-turnos.html', 'meus', 'Agenda', '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M8 15l2.5 2.5L16 13"/>')}
     ${item('/minhas-doacoes.html', 'doacoes', 'Doações', '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/>')}
+    ${item('/conta.html', 'conta', 'Minha conta', '<circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>')}
     <button type="button" onclick="sair()">${svg('<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>')}Sair</button>
   </nav>`;
 }
@@ -145,6 +146,7 @@ function menuOng(ativa, usuario) {
       ${item('/ong/turnos.html', 'turnos', 'Todos os turnos')}
       ${item('/ong/doacoes.html', 'doacoes', 'Doações')}
       ${item('/ong/perfil.html', 'perfil', 'Perfil, PIX e WhatsApp')}
+      ${item('/conta.html', 'conta', 'Minha conta')}
     </nav>
     <div class="perfil">
       <div class="avatar" aria-hidden="true">${esc(iniciais(usuario.ongNome || usuario.nome))}</div>

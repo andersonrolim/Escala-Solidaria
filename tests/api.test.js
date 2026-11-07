@@ -63,9 +63,40 @@ describe('Autenticação', () => {
     expect(r.status).toBe(401);
   });
 
+  test('usuário consulta e atualiza os dados da própria conta', async () => {
+    const agente = await cadastrar({ nome: 'Ana Souza', email: 'a@teste.com', telefone: '(11) 99999-1111' });
+    const perfil = await agente.get('/api/auth/me');
+    expect(perfil.body.usuario).toMatchObject({ nome: 'Ana Souza', email: 'a@teste.com', telefone: '(11) 99999-1111' });
+
+    const atualizado = await agente.put('/api/auth/me').send({ nome: 'Ana Lima', email: 'ana@teste.com', telefone: '(11) 98888-2222' });
+    expect(atualizado.status).toBe(200);
+    expect(atualizado.body.usuario).toMatchObject({ nome: 'Ana Lima', email: 'ana@teste.com', telefone: '(11) 98888-2222' });
+    expect((await agente.get('/api/auth/me')).body.usuario.email).toBe('ana@teste.com');
+  });
+
+  test('não permite usar e-mail de outra conta e exige senha atual para trocar senha', async () => {
+    const ana = await cadastrar({ nome: 'Ana', email: 'ana@teste.com' });
+    await cadastrar({ nome: 'Bia', email: 'bia@teste.com' });
+
+    expect((await ana.put('/api/auth/me').send({ nome: 'Ana', email: 'bia@teste.com' })).status).toBe(409);
+    expect((await ana.put('/api/auth/me').send({ nome: 'Ana', email: 'ana@teste.com', nova_senha: '654321' })).status).toBe(400);
+    expect((await ana.put('/api/auth/me').send({ nome: 'Ana', email: 'ana@teste.com', senha_atual: 'incorreta', nova_senha: '654321' })).status).toBe(401);
+  });
+
+  test('troca senha com confirmação e continua autenticado', async () => {
+    const ana = await cadastrar({ nome: 'Ana', email: 'ana@teste.com' });
+    const atualizado = await ana.put('/api/auth/me').send({
+      nome: 'Ana', email: 'ana@teste.com', senha_atual: '123456', nova_senha: '654321'
+    });
+    expect(atualizado.status).toBe(200);
+    expect((await ana.get('/api/auth/me')).status).toBe(200);
+    expect((await request(app).post('/api/auth/login').send({ email: 'ana@teste.com', senha: '654321' })).status).toBe(200);
+  });
+
   test('rotas protegidas exigem login', async () => {
     expect((await request(app).get('/api/me/inscricoes')).status).toBe(401);
     expect((await request(app).get('/api/ong/painel')).status).toBe(401);
+    expect((await request(app).put('/api/auth/me').send({ nome: 'Ana', email: 'ana@teste.com' })).status).toBe(401);
   });
 });
 
